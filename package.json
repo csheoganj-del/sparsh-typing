@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "description": "TypingClub-style Hindi (Kruti Dev / DevLys 010) touch typing tutor for RSSB LDC (Clerk Grade-II) direct recruitment exam with AI weakness coach and cloud sync.",
   "scripts": {
-    "start": "node server.js",
+    "start": "node local-server.js",
     "test": "node js/selftest.js"
   },
   "keywords": [

@@ -10,5 +10,5 @@ if errorlevel 1 (
 echo Keep this window open while you practice. Closing it stops the save.
 echo Finger timings save in progress\sparsh-rssb-v1.json
 echo Gemini reads the finger file when gemini.key is in this folder.
-node server.js --open
+node local-server.js --open
 if errorlevel 1 pause
