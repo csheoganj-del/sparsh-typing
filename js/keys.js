@@ -4,15 +4,15 @@
   var KD = root.KD = root.KD || {};
 
   KD.FINGERS = {
-    lp: { id: "lp", name: "left little", short: "L5", hand: "left", hue: "#d4533c" },
-    lr: { id: "lr", name: "left ring", short: "L4", hand: "left", hue: "#d89a14" },
-    lm: { id: "lm", name: "left middle", short: "L3", hand: "left", hue: "#2f9e5a" },
-    li: { id: "li", name: "left index", short: "L2", hand: "left", hue: "#3a6fd6" },
-    ri: { id: "ri", name: "right index", short: "R2", hand: "right", hue: "#7a4fd0" },
-    rm: { id: "rm", name: "right middle", short: "R3", hand: "right", hue: "#1f8a7a" },
-    rr: { id: "rr", name: "right ring", short: "R4", hand: "right", hue: "#c46a1a" },
-    rp: { id: "rp", name: "right little", short: "R5", hand: "right", hue: "#c43b55" },
-    th: { id: "th", name: "thumb", short: "Th", hand: "both", hue: "#6d645b" }
+    lp: { id: "lp", name: "left little", short: "L5", hand: "left", hue: "#ef4444" },
+    lr: { id: "lr", name: "left ring", short: "L4", hand: "left", hue: "#f59e0b" },
+    lm: { id: "lm", name: "left middle", short: "L3", hand: "left", hue: "#10b981" },
+    li: { id: "li", name: "left index", short: "L2", hand: "left", hue: "#3b82f6" },
+    ri: { id: "ri", name: "right index", short: "R2", hand: "right", hue: "#3b82f6" },
+    rm: { id: "rm", name: "right middle", short: "R3", hand: "right", hue: "#10b981" },
+    rr: { id: "rr", name: "right ring", short: "R4", hand: "right", hue: "#f59e0b" },
+    rp: { id: "rp", name: "right little", short: "R5", hand: "right", hue: "#ef4444" },
+    th: { id: "th", name: "thumb", short: "Th", hand: "both", hue: "#8b5cf6" }
   };
 
   function key(code, legend, normal, shifted, finger, opts) {

@@ -320,37 +320,67 @@
       audio = audio || new (window.AudioContext || window.webkitAudioContext)();
       if (audio.state === "suspended") audio.resume();
       var t = audio.currentTime;
-      var dur = ok ? 0.028 : 0.055;
-      var n = Math.floor(audio.sampleRate * dur);
-      var buffer = audio.createBuffer(1, n, audio.sampleRate);
-      var data = buffer.getChannelData(0);
-      for (var i = 0; i < n; i++) {
-        var env = Math.pow(1 - i / n, ok ? 4 : 2);
-        data[i] = (Math.random() * 2 - 1) * env;
+      if (ok) {
+        var dur = 0.038;
+        var osc = audio.createOscillator();
+        var g = audio.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(2400, t);
+        osc.frequency.exponentialRampToValueAtTime(700, t + dur);
+        g.gain.setValueAtTime(0.28, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.connect(g);
+        g.connect(audio.destination);
+        osc.start(t);
+        osc.stop(t + dur);
+
+        var sub = audio.createOscillator();
+        var sg = audio.createGain();
+        sub.type = "sine";
+        sub.frequency.setValueAtTime(280, t);
+        sub.frequency.exponentialRampToValueAtTime(60, t + dur);
+        sg.gain.setValueAtTime(0.12, t);
+        sg.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        sub.connect(sg);
+        sg.connect(audio.destination);
+        sub.start(t);
+        sub.stop(t + dur);
+      } else {
+        var dur2 = 0.09;
+        var errOsc = audio.createOscillator();
+        var eg = audio.createGain();
+        errOsc.type = "sawtooth";
+        errOsc.frequency.setValueAtTime(150, t);
+        errOsc.frequency.exponentialRampToValueAtTime(50, t + dur2);
+        eg.gain.setValueAtTime(0.25, t);
+        eg.gain.exponentialRampToValueAtTime(0.001, t + dur2);
+        errOsc.connect(eg);
+        eg.connect(audio.destination);
+        errOsc.start(t);
+        errOsc.stop(t + dur2);
       }
-      var src = audio.createBufferSource();
-      src.buffer = buffer;
-      var filter = audio.createBiquadFilter();
-      filter.type = "bandpass";
-      filter.frequency.value = ok ? 2100 : 320;
-      filter.Q.value = ok ? 0.6 : 0.4;
-      var g = audio.createGain();
-      g.gain.value = ok ? 0.45 : 0.32;
-      src.connect(filter);
-      filter.connect(g);
-      g.connect(audio.destination);
-      src.start(t);
-      var body = audio.createOscillator();
-      var bg = audio.createGain();
-      body.type = "triangle";
-      body.frequency.setValueAtTime(ok ? 180 : 72, t);
-      body.frequency.exponentialRampToValueAtTime(48, t + dur);
-      bg.gain.setValueAtTime(ok ? 0.06 : 0.1, t);
-      bg.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      body.connect(bg);
-      bg.connect(audio.destination);
-      body.start(t);
-      body.stop(t + dur);
+    } catch (e) {}
+  }
+
+  function soundFanfare(stars) {
+    if (!store.settings.sound) return;
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.state === "suspended") audio.resume();
+      var t = audio.currentTime;
+      var notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach(function (freq, i) {
+        var osc = audio.createOscillator();
+        var g = audio.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, t + i * 0.12);
+        g.gain.setValueAtTime(0.18, t + i * 0.12);
+        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.38);
+        osc.connect(g);
+        g.connect(audio.destination);
+        osc.start(t + i * 0.12);
+        osc.stop(t + i * 0.12 + 0.39);
+      });
     } catch (e) {}
   }
 
@@ -404,24 +434,40 @@
     );
   }
 
+  function totalStars() {
+    var sum = 0;
+    if (store && store.stars) {
+      Object.keys(store.stars).forEach(function (k) {
+        sum += (store.stars[k] || 0);
+      });
+    }
+    return sum;
+  }
+
   function bar(extra) {
     var userPill = authToken
-      ? '<span class="auth-pill" title="Live Cloud Sync Active"><span style="width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block;"></span> 👤 ' + esc(currentUser) + '</span>' +
+      ? '<span class="auth-pill" title="Cloud Sync Active"><span style="width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block;"></span> 👤 ' + esc(currentUser) + '</span>' +
         '<button class="btn ghost" style="font-size:12px;padding:6px 10px;" data-act="logout">Logout</button>'
-      : '<button class="btn saffron" style="font-size:12px;padding:6px 14px;" data-act="open-auth">🔑 Cloud Login</button>';
+      : '<button class="btn saffron" style="font-size:12px;padding:6px 14px;" data-act="open-auth">☁️ Cloud Login</button>';
 
     var backupBtn = '<button class="btn ghost" style="font-size:12px;padding:6px 10px;" data-act="export-json" title="Download backup file">💾 Backup</button>';
 
+    var starsPill = '<span class="tc-star-counter" title="Total Stars Earned">⭐ <b>' + totalStars() + '</b> <span style="font-size:11px;opacity:0.8;">/ 285</span></span>';
+
     return (
-      '<header class="bar"><div class="brand"><b>SPARSH</b><span>Kruti Dev / DevLys · RSSB Hindi speed</span></div>' +
+      '<header class="bar">' +
+      '<div class="tc-brand" data-go="home">' +
+      '<span class="tc-logo-badge">typing<b>club</b></span>' +
+      '<span class="tc-lang-tag">HINDI</span>' +
+      '</div>' +
       '<div class="bar-actions">' +
+      starsPill +
       (extra || "") +
+      '<button class="btn ghost" data-go="home">Lessons</button>' +
+      '<button class="btn ghost" data-go="record">Stats</button>' +
+      '<button class="btn ghost" data-go="chart">Key Chart</button>' +
       userPill +
       backupBtn +
-      '<button class="btn ghost" data-go="home">Home</button>' +
-      '<button class="btn ghost" data-go="path">Lessons</button>' +
-      '<button class="btn ghost" data-go="record">Record</button>' +
-      '<button class="btn ghost" data-go="chart">Key chart</button>' +
       "</div></header>" +
       (showAuthModal ? authModalHTML() : "")
     );
@@ -466,24 +512,53 @@
     if (!resume) return false;
     return (resume.i || 0) > 0 || (resume.wi || 0) > 0 || (resume.marks && resume.marks.length > 0);
   }
+  function lessonGlyph(l) {
+    if (!l) return "";
+    var t = (l.title || "").toLowerCase();
+    if (l.stage === "word" || l.section === "words" || t.indexOf("words") >= 0) return "शब्द";
+    if (l.section === "ending" || l.section === "para" || t.indexOf("sentence") >= 0 || t.indexOf("paragraph") >= 0) return "वाक्य";
+    if (t.indexOf("left hand") >= 0) return "बायाँ";
+    if (t.indexOf("right hand") >= 0) return "दायाँ";
+    if (t.indexOf("half") >= 0) return "आधा";
+    if (t.indexOf("bindu") >= 0) return "ं";
+    if (t.indexOf("reach") >= 0) return "पहुँच";
+    if (l.newKey && KD.BY_CODE && KD.BY_CODE[l.newKey]) {
+      var norm = KD.BY_CODE[l.newKey].normal;
+      var face = KD.keyFace ? KD.keyFace(norm) : "";
+      if (face) return face;
+    }
+    var m = (l.title || "").match(/[\u0900-\u097F]+/);
+    if (m) return m[0];
+    return l.title ? l.title.slice(0, 4) : "";
+  }
+
   function pathSectionsHTML() {
     var html = "";
     var currentNi = nextLessonIndex();
     KD.SECTIONS.forEach(function (sec) {
       var lessons = KD.LESSONS.map(function (l, i) { return { l: l, i: i }; }).filter(function (x) { return x.l.section === sec.id; });
       if (!lessons.length) return;
-      html += '<section class="sec"><div class="sec-h"><h2>' + esc(sec.title) + '</h2><span class="muted">' + esc(sec.blurb) + "</span></div><div class=\"nodes\">";
+      html += '<section class="sec" style="margin-bottom:28px;"><div class="sec-h" style="margin-bottom:14px;"><h2 style="font-size:20px;margin:0 0 4px;">' + esc(sec.title) + '</h2><span class="muted" style="font-size:13.5px;">' + esc(sec.blurb) + "</span></div><div class=\"nodes\">";
       lessons.forEach(function (x) {
         var st = store.stars[x.l.id] || 0;
         var open = unlocked(x.i);
         var cls = "node" + (open ? "" : " lock") + (cleared(x.l) ? " done" : "") + (currentNi === x.i ? " now" : "");
         var hist = attemptsFor(x.l.id);
         var last = hist.length ? hist[hist.length - 1] : null;
+        var glyph = lessonGlyph(x.l);
         html += '<button class="' + cls + '" data-lesson="' + x.i + '"' + (open ? "" : " disabled") + ">" +
-          '<span class="node-n">' + (x.i + 1) + "</span>" +
-          (open ? "" : '<span class="lock-mark">Locked</span>') +
-          "<b>" + esc(x.l.title) + "</b><em>" + starStr(st) + "</em>" +
-          (last ? '<span class="node-score">' + Math.round(last.acc || 0) + "% · " + fmt(last.wpm || 0) + " WPM</span>" : "") +
+          '<div class="tc-tile-head">' +
+          '<span class="tc-tile-num">' + (x.i + 1) + '</span>' +
+          (!open ? '<span class="tc-tile-lock">🔒</span>' : (currentNi === x.i ? '<span class="tc-tile-play">PLAY</span>' : '')) +
+          '</div>' +
+          '<div class="tc-tile-body">' +
+          '<div class="tc-tile-glyph h">' + esc(glyph) + '</div>' +
+          '<div class="tc-tile-name">' + esc(x.l.title) + '</div>' +
+          '</div>' +
+          '<div class="tc-tile-footer">' +
+          '<div class="tc-tile-stars">' + starStr(st) + '</div>' +
+          (last ? '<div class="tc-tile-wpm">' + fmt(last.wpm || 0) + ' WPM</div>' : '') +
+          '</div>' +
           "</button>";
       });
       html += "</div></section>";
@@ -638,14 +713,15 @@
     var spaceOn = next && next.code === "Space";
     rows += '<div class="krow">' +
       shiftHTML("ShiftLeft", "Left Shift", shiftLeftOn) +
-      '<div class="key space' + (spaceOn ? " next" : "") + '"><div class="hi space-label">Space</div></div>' +
+      '<div class="key space' + (spaceOn ? " next" : "") + '" data-finger="th"><div class="hi space-label">Space</div></div>' +
       shiftHTML("ShiftRight", "Right Shift", shiftRightOn) +
       "</div>";
     return '<div class="board">' + rows + "</div>";
   }
   function shiftHTML(code, label, on) {
     var quiet = session && session.hand ? " quiet" : "";
-    return '<div class="key wide' + (on ? " next" : "") + quiet + '"><div class="en">' + code.replace("Shift", "") + '</div><div class="hi" style="font-size:11px;font-family:var(--sans)">' + label + "</div></div>";
+    var finger = code === "ShiftLeft" ? "lp" : "rp";
+    return '<div class="key wide' + (on ? " next" : "") + quiet + '" data-finger="' + finger + '"><div class="en">' + code.replace("Shift", "") + '</div><div class="hi" style="font-size:11px;font-family:var(--sans)">' + label + "</div></div>";
   }
   function keyHTML(k, next) {
     var on = next && next.type !== "alt" && next.code === k.code;
@@ -656,23 +732,139 @@
     var small = KD.keyFace(smallRaw);
     var quiet = session && session.hand && KD.handOf(k.code) && KD.handOf(k.code) !== session.hand && !on;
     var cls = "key" + (k.home ? " home" : "") + (on ? " next" : "") + (quiet ? " quiet" : "");
-    var hue = KD.FINGERS[k.finger].hue;
-    var style = on ? ' style="outline-color:' + hue + '"' : "";
-    return '<div class="' + cls + '"' + style + '><div class="en">' + esc(k.legend) + "</div>" +
+    var hue = KD.FINGERS[k.finger] ? KD.FINGERS[k.finger].hue : "#3b82f6";
+    var style = on ? ' style="border-color:' + hue + ';outline:3px solid ' + hue + ';box-shadow:0 0 16px ' + hue + ';"' : "";
+    return '<div class="' + cls + '" data-finger="' + esc(k.finger) + '"' + style + '><div class="en">' + esc(k.legend) + "</div>" +
       '<div class="hi">' + esc(big) + "</div>" +
       (k.bump && !showShift ? '<div class="bump-dot" style="margin-top:-6px"></div>' : "") +
       '<div class="altg">' + esc(small) + "</div></div>";
   }
 
-  function handsHTML(fingerId, shiftSide) {
-    var order = ["lp", "lr", "lm", "li", "ri", "rm", "rr", "rp"];
-    return '<div class="hands">' + order.map(function (id, n) {
-      var f = KD.FINGERS[id];
-      var on = id === fingerId || (shiftSide && ((shiftSide === "left" && id === "lp") || (shiftSide === "right" && id === "rp")));
-      var quiet = session && session.hand && f.hand !== session.hand && !on;
-      var gap = n === 4 ? '<div class="gap-finger"></div>' : "";
-      return gap + '<div class="hand-finger' + (on ? " on" : "") + (quiet ? " quiet" : "") + '"' + (on ? ' style="background:' + f.hue + '"' : "") + ">" + esc(f.short) + "<br>" + esc(f.name.split(" ")[1] || f.name) + "</div>";
-    }).join("") + "</div>";
+  function handsSVG(next) {
+    var fingerId = next ? next.finger : null;
+    var isShift = next ? !!next.shift : false;
+    var shiftSide = isShift ? KD.shiftHand(next.finger) : null;
+
+    var colors = {
+      lp: "#ef4444",
+      lr: "#f59e0b",
+      lm: "#10b981",
+      li: "#3b82f6",
+      ri: "#3b82f6",
+      rm: "#10b981",
+      rr: "#f59e0b",
+      rp: "#ef4444",
+      th: "#8b5cf6"
+    };
+
+    function finger(id, name, key, x, y, w, h, rx, isThumb) {
+      var active = id === fingerId || (id === "th" && (fingerId === "th" || (next && next.code === "Space")));
+      var shift = isShift && ((shiftSide === "left" && id === "lp") || (shiftSide === "right" && id === "rp"));
+      var col = colors[id] || "#888";
+      var fill = active ? col : (shift ? "#dc2626" : "rgba(235, 226, 212, 0.65)");
+      var stroke = (active || shift) ? "#fff" : "rgba(185, 170, 150, 0.7)";
+      var strokeWidth = (active || shift) ? 3 : 1.5;
+      var filter = (active || shift) ? 'filter="drop-shadow(0 0 8px ' + fill + ')"' : "";
+      var transform = active ? 'transform="translate(0, -6)"' : "";
+      var textColor = (active || shift) ? "#ffffff" : "#2d2218";
+      var badgeFill = (active || shift) ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.85)";
+
+      return (
+        '<g class="tc-f tc-f-' + id + (active ? ' active' : '') + (shift ? ' shift-on' : '') + '" ' + transform + '>' +
+        '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + rx + '" ' +
+        'fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + strokeWidth + '" ' + filter + ' />' +
+        '<circle cx="' + (x + w/2) + '" cy="' + (y + rx + 3) + '" r="' + (rx - 2) + '" fill="' + badgeFill + '" />' +
+        '<text x="' + (x + w/2) + '" y="' + (y + rx + 7) + '" text-anchor="middle" font-size="11" font-weight="700" fill="' + textColor + '">' +
+        (shift ? '⇧' : key) +
+        '</text>' +
+        '</g>'
+      );
+    }
+
+    var leftHand = (
+      '<svg class="tc-hand-svg" viewBox="0 0 220 180" width="220" height="180">' +
+      '<path d="M 20 110 C 20 85, 45 80, 60 85 C 90 85, 140 95, 160 120 C 170 135, 165 170, 140 175 C 90 180, 30 170, 20 110 Z" ' +
+      'fill="rgba(240, 232, 220, 0.6)" stroke="rgba(195, 180, 160, 0.75)" stroke-width="2" />' +
+      '<text x="85" y="155" text-anchor="middle" font-size="11" font-weight="700" fill="#8c7e6d" letter-spacing="1">LEFT HAND</text>' +
+      finger("lp", "Pinky", "A", 16, 52, 22, 65, 11) +
+      finger("lr", "Ring", "S", 44, 28, 24, 88, 12) +
+      finger("lm", "Middle", "D", 74, 15, 26, 102, 13) +
+      finger("li", "Index", "F", 106, 28, 25, 90, 12.5) +
+      finger("th", "Thumb", "␣", 140, 85, 28, 62, 14, true) +
+      '</svg>'
+    );
+
+    var rightHand = (
+      '<svg class="tc-hand-svg" viewBox="0 0 220 180" width="220" height="180">' +
+      '<path d="M 200 110 C 200 85, 175 80, 160 85 C 130 85, 80 95, 60 120 C 50 135, 55 170, 80 175 C 130 180, 190 170, 200 110 Z" ' +
+      'fill="rgba(240, 232, 220, 0.6)" stroke="rgba(195, 180, 160, 0.75)" stroke-width="2" />' +
+      '<text x="135" y="155" text-anchor="middle" font-size="11" font-weight="700" fill="#8c7e6d" letter-spacing="1">RIGHT HAND</text>' +
+      finger("th", "Thumb", "␣", 52, 85, 28, 62, 14, true) +
+      finger("ri", "Index", "J", 89, 28, 25, 90, 12.5) +
+      finger("rm", "Middle", "K", 120, 15, 26, 102, 13) +
+      finger("rr", "Ring", "L", 152, 28, 24, 88, 12) +
+      finger("rp", "Pinky", ";", 182, 52, 22, 65, 11) +
+      '</svg>'
+    );
+
+    return (
+      '<div class="tc-hands-wrapper">' +
+      '<div class="tc-hands-flex">' +
+      leftHand +
+      rightHand +
+      '</div></div>'
+    );
+  }
+
+  function progressBarHTML() {
+    if (!session) return "";
+    var pct = 0;
+    if (session.kind === "exact") {
+      var total = session.steps ? session.steps.length : 1;
+      pct = Math.min(100, Math.round(((session.i || 0) / total) * 100));
+    } else {
+      var totalWords = session.words ? session.words.length : 1;
+      pct = Math.min(100, Math.round(((session.wi || 0) / totalWords) * 100));
+    }
+    return (
+      '<div class="tc-progress-wrap">' +
+      '<div class="tc-progress-bar"><div class="tc-progress-fill" style="width:' + pct + '%;"></div></div>' +
+      '<span class="tc-progress-text">' + pct + '%</span>' +
+      '</div>'
+    );
+  }
+
+  function hintKeyPromptHTML(next) {
+    if (!next || (session && session.hints === "none" && session.exam)) return "";
+    var f = KD.FINGERS[next.finger] || KD.FINGERS.th;
+    var hue = f ? f.hue : "#3b82f6";
+    var fName = f ? f.name : "Finger";
+    var glyph = next.ch || (next.type === "alt" ? ("Alt+" + next.num) : "");
+    if (!glyph && next.code) {
+      var meta = KD.BY_CODE[next.code];
+      glyph = next.shift ? (meta && meta.shifted) : (meta && meta.normal);
+    }
+    var keyDisplay = next.legend || next.code || "";
+    if (keyDisplay === "Space") keyDisplay = "Spacebar";
+    if (next.shift) keyDisplay = "Shift + " + keyDisplay;
+
+    return (
+      '<div class="tc-hint-card">' +
+      (glyph ? '<span class="tc-hint-char">' + esc(glyph) + '</span>' : '') +
+      '<span class="tc-hint-badge" style="background:' + hue + ';">' + esc(keyDisplay) + '</span>' +
+      '<span class="tc-hint-finger">' + esc(fName) + '</span>' +
+      '</div>'
+    );
+  }
+
+  function starFanfareHTML(stars) {
+    var count = Math.max(0, Math.min(5, Math.round(stars || 0)));
+    var html = '<div class="tc-stars-fanfare">';
+    for (var i = 1; i <= 5; i++) {
+      var earned = i <= count;
+      html += '<span class="tc-star' + (earned ? ' earned' : '') + '" style="animation-delay:' + (i * 120) + 'ms;">★</span>';
+    }
+    return html + '</div>';
   }
 
   function plainLesson(src) {
@@ -1029,6 +1221,7 @@
     var pad = "";
     if (next && next.type === "alt") pad = numpadHTML(next.num);
     run.innerHTML =
+      progressBarHTML() +
       '<div class="run-top"><div><div class="kicker">' + esc(session.lesson.title) + "</div>" +
       (session.live ? liveNote() : "") +
       "</div>" +
@@ -1038,7 +1231,9 @@
       liveMarks + "</div></div>" +
       banners +
       '<div class="stage" style="--drill:' + drillSize() + 'px">' + body + "</div>" +
+      hintKeyPromptHTML(next) +
       keyboardHTML(session.hints === "none" && session.exam ? null : next) +
+      handsSVG(session.hints === "none" && session.exam ? null : next) +
       pad;
     bindPad();
     var cur = document.querySelector(".box.now, .word.now");
@@ -1087,9 +1282,11 @@
       (face ? '<span class="fit-glyph">' + esc(face) + "</span>" : "") +
       esc(L.title) + "</h2>" +
       liveNote() +
-      '</div><button class="btn primary" id="start-run">Start typing</button></div>' +
+      '</div><button class="btn saffron tc-continue-btn" id="start-run">Start Typing (Press Enter) ▶</button></div>' +
       '<div class="stage" style="--drill:' + drillSize() + 'px">' + preview + "</div>" +
+      hintKeyPromptHTML(first) +
       keyboardHTML(first) +
+      handsSVG(first) +
       "</div>";
   }
 
@@ -1729,8 +1926,13 @@
       askCoach();
     }
     save();
-    screen = session.index >= 0 && session.lesson && session.lesson.id ? "lesson" : "result";
+    screen = "result";
     session.phase = "done";
+    if (session.result && session.result.stars) {
+      soundFanfare(session.result.stars);
+    } else {
+      soundFanfare(1);
+    }
     draw();
   }
 
@@ -2150,27 +2352,46 @@
     }
     var r = session.result;
     if (session.lesson && session.lesson.id === "coach") {
-      return '<div class="wrap narrow"><div class="card"><div class="kicker">From your speed</div>' +
-        "<h2>" + esc(session.lesson.title) + "</h2>" +
-        '<div class="stats"><div class="stat"><b>' + Math.round(r.acc) + '%</b><span>Accuracy</span></div>' +
-        '<div class="stat"><b>' + fmt(r.wpm) + "</b><span>Key WPM</span></div></div>" +
-        '<div class="row-btns"><button class="btn" data-act="retry">Drill again</button>' +
-        '<button class="btn primary" data-act="start-current">Continue Next Level</button></div></div>' +
+      return '<div class="wrap narrow">' +
+        '<div class="card" style="text-align:center;padding:32px 24px;border-top:5px solid var(--saffron);">' +
+        '<div class="kicker">⚡ AI Adaptive Drill Complete</div>' +
+        '<h2 style="font-size:28px;margin:8px 0 14px;">' + esc(session.lesson.title) + '</h2>' +
+        starFanfareHTML(r.stars || 3) +
+        '<div class="stats" style="max-width:540px;margin:16px auto 24px;">' +
+        '<div class="stat"><b style="font-size:28px;color:var(--good);">' + Math.round(r.acc) + '%</b><span>Accuracy</span></div>' +
+        '<div class="stat"><b style="font-size:28px;color:var(--ink);">' + fmt(r.wpm) + '</b><span>Key WPM</span></div>' +
+        '</div>' +
+        '<div class="row-btns" style="justify-content:center;gap:12px;">' +
+        '<button class="btn saffron tc-continue-btn primary" data-act="start-current">Continue Next Level ▶</button>' +
+        '<button class="btn" data-act="retry">↺ Drill Again</button>' +
+        '<button class="btn ghost" data-go="home">Course Map</button>' +
+        '</div></div>' +
         aiCoachDiagnosisHTML() +
         '</div>';
     }
     if (session.placement) return placementResult(r);
     if (r.kind === "exact") {
       var openNext = (r.stars >= 1 || r.acc >= 80) && session.index >= 0 && unlocked(session.index + 1);
-      return '<div class="wrap narrow"><div class="card"><div class="kicker">' + esc(session.lesson.title) + "</div>" +
-        '<div class="stars">' + starStr(r.stars) + "</div>" +
-        "<h2>" + ((r.stars >= 1 || r.acc >= 80) ? "Level Passed!" : "Try Again for 1+ Stars") + "</h2>" +
-        '<div class="stats"><div class="stat"><b>' + Math.round(r.acc) + '%</b><span>Accuracy · pass ' + session.lesson.acc + '%</span></div>' +
-        '<div class="stat"><b>' + fmt(r.wpm) + '</b><span>Key WPM · ' + session.lesson.min + " for 3 stars</span></div></div>" +
-        '<div class="row-btns">' +
-        '<button class="btn" data-act="retry">Again</button>' +
-        (openNext ? '<button class="btn primary" data-act="next">Next Level ▶</button>' : "") +
-        '<button class="btn ghost" data-go="home">Course Map</button></div></div>' +
+      var passed = (r.stars >= 1 || r.acc >= 80);
+      var headline = r.stars === 5 ? "Outstanding! 5 Stars! 🌟" :
+                     r.stars >= 3 ? "Lesson Passed! " + r.stars + " Stars! 🎉" :
+                     passed ? "Good Effort! Level Passed 👍" :
+                     "Practice Makes Perfect! Try Again 💪";
+      return '<div class="wrap narrow">' +
+        '<div class="card" style="text-align:center;padding:32px 24px;border-top:5px solid var(--saffron);">' +
+        '<div class="kicker">TypingClub Hindi · Level ' + (session.index >= 0 ? (session.index + 1) : "") + ' Complete</div>' +
+        '<h2 style="font-size:32px;margin:8px 0 14px;">' + headline + '</h2>' +
+        starFanfareHTML(r.stars) +
+        '<p style="color:var(--muted);font-size:16px;margin:0 0 20px;">' + esc(session.lesson.title) + '</p>' +
+        '<div class="stats" style="max-width:540px;margin:0 auto 24px;">' +
+        '<div class="stat"><b style="font-size:28px;color:var(--ink);">' + fmt(r.wpm) + '</b><span>Speed (WPM) · Goal ' + session.lesson.min + '</span></div>' +
+        '<div class="stat"><b style="font-size:28px;color:' + (r.acc >= session.lesson.acc ? 'var(--good)' : 'var(--saffron)') + ';">' + Math.round(r.acc) + '%</b><span>Accuracy · Goal ' + session.lesson.acc + '%</span></div>' +
+        '</div>' +
+        '<div class="row-btns" style="justify-content:center;gap:12px;">' +
+        (openNext ? '<button class="btn saffron tc-continue-btn primary" data-act="next">Press Enter to Continue ▶</button>' : '<button class="btn saffron tc-continue-btn primary" data-act="retry">↺ Practice Again</button>') +
+        '<button class="btn" data-act="retry">↺ Replay</button>' +
+        '<button class="btn ghost" data-go="home">Course Map</button>' +
+        '</div></div>' +
         aiCoachDiagnosisHTML() +
         '</div>';
     }
@@ -2178,14 +2399,25 @@
       var starsP = r.stars || 0;
       var per = session.lang === "en" ? 0.05 : 0.0625;
       var projected = Math.min(25, r.wordRate * 10 * per);
-      return '<div class="wrap narrow"><div class="card"><div class="kicker">' + esc(session.lesson.title) + "</div>" +
-        '<div class="stars">' + starStr(starsP) + "</div>" +
-        "<h2>" + r.correct + " correct · " + r.wrong + " locked wrong</h2>" +
-        '<div class="stats"><div class="stat"><b>' + fmt(r.wordRate) + '</b><span>Correct words / min</span></div>' +
-        '<div class="stat"><b>' + fmt(projected) + '</b><span>Projected 10-minute marks / 25</span></div></div>' +
-        '<div class="row-btns"><button class="btn" data-act="retry">Again</button>' +
-        (((starsP >= 1 || r.acc >= 80) && unlocked(session.index + 1)) ? '<button class="btn primary" data-act="next">Next Level ▶</button>' : "") +
-        '<button class="btn ghost" data-go="home">Course Map</button></div></div>' +
+      var passedP = (starsP >= 1 || r.acc >= 80);
+      var openNextP = passedP && unlocked(session.index + 1);
+      return '<div class="wrap narrow">' +
+        '<div class="card" style="text-align:center;padding:32px 24px;border-top:5px solid var(--saffron);">' +
+        '<div class="kicker">TypingClub Hindi · Level ' + (session.index >= 0 ? (session.index + 1) : "") + ' Complete</div>' +
+        '<h2 style="font-size:30px;margin:8px 0 14px;">' + (passedP ? "Level Passed! 🎉" : "Keep Practicing! 💪") + '</h2>' +
+        starFanfareHTML(starsP) +
+        '<p style="color:var(--muted);font-size:16px;margin:0 0 20px;">' + esc(session.lesson.title) + '</p>' +
+        '<div class="stats" style="max-width:540px;margin:0 auto 24px;">' +
+        '<div class="stat"><b style="font-size:28px;color:var(--good);">' + r.correct + '</b><span>Words Correct</span></div>' +
+        '<div class="stat"><b style="font-size:28px;color:var(--ink);">' + fmt(r.wpm) + '</b><span>Speed (WPM)</span></div>' +
+        '<div class="stat"><b style="font-size:28px;color:var(--ink);">' + fmt(r.wordRate) + '</b><span>Words / Minute</span></div>' +
+        '<div class="stat"><b style="font-size:28px;color:var(--saffron);">' + fmt(projected) + '</b><span>Score / 25</span></div>' +
+        '</div>' +
+        '<div class="row-btns" style="justify-content:center;gap:12px;">' +
+        (openNextP ? '<button class="btn saffron tc-continue-btn primary" data-act="next">Press Enter to Continue ▶</button>' : '<button class="btn saffron tc-continue-btn primary" data-act="retry">↺ Practice Again</button>') +
+        '<button class="btn" data-act="retry">↺ Replay</button>' +
+        '<button class="btn ghost" data-go="home">Course Map</button>' +
+        '</div></div>' +
         aiCoachDiagnosisHTML() +
         '</div>';
     }
