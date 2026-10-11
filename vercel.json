@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/auth/:path*", "destination": "/api/auth?action=:path*" },
+    { "source": "/api/progress", "destination": "/api/progress" },
+    { "source": "/api/coach", "destination": "/api/coach" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    }
+  ]
+}
