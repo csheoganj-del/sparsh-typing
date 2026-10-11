@@ -290,27 +290,27 @@
   }
   function askCoach() {
     var local = { at: Date.now(), note: fingerNote(), repeat: localRepeat(), source: "fingers" };
-    store.coach = local;
-    if (!folderSave) return;
+    store.coach = store.coach || local;
     var profile = fingerProfile();
     fetch("/api/coach", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(profile)
     }).then(function (r) { return r.json(); }).then(function (plan) {
-      if (!plan || (plan.source !== "grok" && plan.source !== "gemini") || !plan.note) return;
+      if (!plan || !plan.note) return;
       var allow = {};
       (profile.bank || []).forEach(function (w) { allow[w] = 1; });
       var repeat = [];
       (plan.repeat || []).forEach(function (w) { if (allow[w]) repeat.push(w); });
       store.coach = {
         at: Date.now(),
-        note: String(plan.note).slice(0, 280),
+        note: String(plan.note).slice(0, 320),
+        drill: (plan.drill && plan.drill.length) ? plan.drill : (store.coach && store.coach.drill),
         repeat: repeat.length ? repeat.slice(0, 8) : local.repeat,
-        source: plan.source === "gemini" ? "gemini" : "grok"
+        source: plan.source === "gemini" ? "gemini" : "fingers"
       };
       save();
-      if (!session && screen === "home") draw();
+      if (!session && (screen === "home" || screen === "result")) draw();
     }).catch(function () {});
   }
 
@@ -530,20 +530,29 @@
       '<button class="btn ghost" data-act="toggle-unlock">' + (store.unlockedAll ? "🔒 Sequential Path" : "🔓 Unlock All Levels") + '</button>' +
       '</div></div>' +
 
-      '<div class="card" style="margin-bottom:24px;background:var(--paper);border:1px dashed var(--line);padding:14px 18px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
-      '<div>' +
-      '<span class="kicker" style="color:var(--good);font-size:11px;">🤖 AI Telemetry & Latency Diagnostics</span>' +
-      '<div style="font-size:13px;color:var(--ink);margin-top:2px;">' +
-      (slowestPair ? '<b>Slowest pair:</b> ' + esc(slowestPair) + ' · ' : '') +
-      (slowestKey ? '<b>Slowest key:</b> ' + esc(slowestKey) + ' · ' : '') +
-      (topMisses ? '<b>Frequent misses:</b> ' + esc(topMisses) + ' · ' : '') +
-      '<span>Pace: <b>' + (pace ? pace + 'ms/key' : 'Calculating...') + '</b></span>' +
+      '<div class="card" style="margin-bottom:24px;background:linear-gradient(135deg, rgba(255,250,243,1) 0%, rgba(247,242,232,0.95) 100%);border:2px solid var(--saffron);box-shadow:0 8px 24px rgba(196,81,18,0.1);padding:18px 22px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:8px;">' +
+      '<div style="display:flex;align-items:center;gap:8px;">' +
+      '<span style="width:10px;height:10px;border-radius:50%;background:var(--good);display:inline-block;"></span>' +
+      '<span class="kicker" style="color:var(--saffron-deep);font-size:12px;">🤖 Active AI Typing Tutor & Adaptive Coach</span>' +
       '</div>' +
+      '<span style="font-size:11px;background:var(--paper-2);padding:3px 10px;border-radius:12px;font-weight:600;color:var(--muted);">' +
+      ((store.coach && store.coach.source === "gemini") ? "✨ Gemini 2.5 Active" : "Adaptive Reflex Engine") +
+      '</span>' +
       '</div>' +
-      '<div style="font-size:12px;color:var(--muted);">' +
-      'AI learns from your practice and auto-generates weak key sprints.' +
+      '<p style="margin:4px 0 12px;font-size:14px;color:var(--ink);font-weight:500;line-height:1.5;">' +
+      esc((store.coach && store.coach.note) ? store.coach.note : fingerNote()) +
+      '</p>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--ink);">' +
+      (slowestKey ? '<span style="background:#fff;border:1px solid var(--line);padding:5px 10px;border-radius:8px;"><b>Slow key:</b> <span style="color:var(--bad);font-weight:700;">' + esc(slowestKey) + '</span></span>' : '') +
+      (slowestPair ? '<span style="background:#fff;border:1px solid var(--line);padding:5px 10px;border-radius:8px;"><b>Sticking pair:</b> <span style="color:var(--saffron);font-weight:700;">' + esc(slowestPair) + '</span></span>' : '') +
+      (topMisses ? '<span style="background:#fff;border:1px solid var(--line);padding:5px 10px;border-radius:8px;"><b>Misses:</b> <span style="color:var(--saffron-deep);font-weight:700;">' + esc(topMisses) + '</span></span>' : '') +
+      '<span style="background:#fff;border:1px solid var(--line);padding:5px 10px;border-radius:8px;"><b>Pace:</b> ' + (pace ? pace + 'ms/stroke' : 'Evaluating...') + '</span>' +
       '</div>' +
+      '<button class="btn saffron" data-act="start-ai-drill" style="font-size:13px;font-weight:700;padding:9px 18px;display:flex;align-items:center;gap:6px;">' +
+      '⚡ Start Custom AI Drill' +
+      '</button>' +
       '</div></div>' +
 
       '<div class="kicker" style="margin-bottom:8px;">TypingClub Hindi Course Map · 57 Levels</div>' +
@@ -2040,6 +2049,89 @@
     startLesson(index);
   }
 
+  function aiCoachDiagnosisHTML() {
+    var board = KD.coachBoard(store.touch);
+    var pace = Math.round(board.pace || 0);
+    var slowKey = board.slowKeys && board.slowKeys[0];
+    var slowPair = board.slowPairs && board.slowPairs[0];
+    var worstMiss = null;
+    Object.keys(store.misses || {}).forEach(function (c) {
+      if (!KD.drillable(c)) return;
+      var cnt = store.misses[c] || 0;
+      if (cnt >= 2 && (!worstMiss || cnt > worstMiss.n)) worstMiss = { c: c, n: cnt };
+    });
+
+    var note = (store.coach && store.coach.note) ? store.coach.note : fingerNote();
+    var drillWords = (store.coach && store.coach.drill && store.coach.drill.length) ? store.coach.drill : null;
+    var drillCount = drillWords ? drillWords.length : 8;
+
+    var badges = [];
+    if (slowKey) {
+      badges.push('<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;">' +
+        '<span style="color:var(--muted);display:block;font-size:11px;text-transform:uppercase;font-weight:600;">Slowest Key</span>' +
+        '<b style="font-size:16px;color:var(--bad);">' + esc(faceOfId(slowKey.id)) + '</b> <span style="font-size:12px;color:var(--muted);">' + Math.round(slowKey.avg) + 'ms</span>' +
+        '</div>');
+    }
+    if (slowPair) {
+      badges.push('<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;">' +
+        '<span style="color:var(--muted);display:block;font-size:11px;text-transform:uppercase;font-weight:600;">Sticking Transition</span>' +
+        '<b style="font-size:16px;color:var(--saffron);">' + esc(faceOfId(slowPair.id)) + '</b> <span style="font-size:12px;color:var(--muted);">' + Math.round(slowPair.avg) + 'ms</span>' +
+        '</div>');
+    }
+    if (worstMiss) {
+      badges.push('<div style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;">' +
+        '<span style="color:var(--muted);display:block;font-size:11px;text-transform:uppercase;font-weight:600;">Frequent Miss</span>' +
+        '<b style="font-size:16px;color:var(--saffron-deep);">' + esc(faceOfId(worstMiss.c)) + '</b> <span style="font-size:12px;color:var(--muted);">' + worstMiss.n + ' slips</span>' +
+        '</div>');
+    }
+
+    return (
+      '<div class="card" style="margin-top:20px;background:linear-gradient(135deg, rgba(255,250,243,1) 0%, rgba(247,242,232,0.95) 100%);border:2px solid var(--saffron);box-shadow:0 12px 30px rgba(196,81,18,0.12);">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">' +
+      '<span class="kicker" style="color:var(--saffron-deep);font-size:12px;display:flex;align-items:center;gap:6px;">' +
+      '<span style="width:10px;height:10px;border-radius:50%;background:var(--saffron);display:inline-block;"></span>' +
+      '🤖 AI Typing Doctor Diagnosis' +
+      '</span>' +
+      '<span style="font-size:11px;background:var(--paper-2);padding:2px 8px;border-radius:12px;font-weight:600;color:var(--muted);">' +
+      ((store.coach && store.coach.source === "gemini") ? "✨ Gemini 2.5 Active" : "Adaptive Reflex Engine") +
+      '</span>' +
+      '</div>' +
+      '<p style="margin:6px 0 12px;font-size:14px;line-height:1.5;color:var(--ink);font-weight:500;">' + esc(note) + '</p>' +
+      (badges.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:8px;margin-bottom:14px;">' + badges.join("") + '</div>' : '') +
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">' +
+      '<button class="btn saffron" data-act="start-ai-drill" style="font-size:14px;font-weight:700;padding:11px 20px;display:flex;align-items:center;gap:6px;">' +
+      '⚡ Start AI Adaptive Recovery Drill (' + drillCount + ' target words)' +
+      '</button>' +
+      '</div>' +
+      '</div>'
+    );
+  }
+
+  function startAIDrill() {
+    var board = KD.coachBoard(store.touch);
+    var plan = KD.planCoach(store.touch, store.misses, "");
+    if (!plan && board.slowKeys && board.slowKeys[0]) {
+      plan = { kind: "key", id: board.slowKeys[0].id, avg: board.slowKeys[0].avg, ratio: 1.4 };
+    }
+    if (!plan && board.slowPairs && board.slowPairs[0]) {
+      plan = { kind: "pair", id: board.slowPairs[0].id, avg: board.slowPairs[0].avg, ratio: 1.4 };
+    }
+    if (!plan) {
+      var worstCode = null;
+      var maxMiss = 0;
+      Object.keys(store.misses || {}).forEach(function (c) {
+        if (!KD.drillable(c)) return;
+        var n = store.misses[c] || 0;
+        if (n > maxMiss) { maxMiss = n; worstCode = c; }
+      });
+      if (worstCode) plan = { kind: "key", id: worstCode, avg: 0, fromMiss: true };
+    }
+    if (!plan) {
+      plan = { kind: "key", id: "d", avg: 300 };
+    }
+    startCoach(plan);
+  }
+
   function resultHTML() {
     if (!session || !session.result) return '<div class="wrap"><div class="card">No result.</div></div>';
     if (session.live && store.live && store.live.lesson) {
@@ -2052,7 +2144,9 @@
         "<h2>" + Math.round(rLive.acc || 0) + "% · " + fmt(rLive.wpm || 0) + " WPM</h2>" +
         '<div class="kicker">' + esc(labels ? labels.title : next.title) + "</div>" +
         '<p class="live-words">' + words + "</p>" +
-        '<div class="row-btns"><button class="btn primary" data-act="live">Next lesson</button></div></div></div>';
+        '<div class="row-btns"><button class="btn primary" data-act="live">Next lesson</button></div></div>' +
+        aiCoachDiagnosisHTML() +
+        '</div>';
     }
     var r = session.result;
     if (session.lesson && session.lesson.id === "coach") {
@@ -2061,7 +2155,9 @@
         '<div class="stats"><div class="stat"><b>' + Math.round(r.acc) + '%</b><span>Accuracy</span></div>' +
         '<div class="stat"><b>' + fmt(r.wpm) + "</b><span>Key WPM</span></div></div>" +
         '<div class="row-btns"><button class="btn" data-act="retry">Drill again</button>' +
-        '<button class="btn primary" data-act="start-current">Continue Next Level</button></div></div></div>';
+        '<button class="btn primary" data-act="start-current">Continue Next Level</button></div></div>' +
+        aiCoachDiagnosisHTML() +
+        '</div>';
     }
     if (session.placement) return placementResult(r);
     if (r.kind === "exact") {
@@ -2074,7 +2170,9 @@
         '<div class="row-btns">' +
         '<button class="btn" data-act="retry">Again</button>' +
         (openNext ? '<button class="btn primary" data-act="next">Next Level ▶</button>' : "") +
-        '<button class="btn ghost" data-go="home">Course Map</button></div></div></div>';
+        '<button class="btn ghost" data-go="home">Course Map</button></div></div>' +
+        aiCoachDiagnosisHTML() +
+        '</div>';
     }
     if (!session.exam) {
       var starsP = r.stars || 0;
@@ -2087,7 +2185,9 @@
         '<div class="stat"><b>' + fmt(projected) + '</b><span>Projected 10-minute marks / 25</span></div></div>' +
         '<div class="row-btns"><button class="btn" data-act="retry">Again</button>' +
         (((starsP >= 1 || r.acc >= 80) && unlocked(session.index + 1)) ? '<button class="btn primary" data-act="next">Next Level ▶</button>' : "") +
-        '<button class="btn ghost" data-go="home">Course Map</button></div></div></div>';
+        '<button class="btn ghost" data-go="home">Course Map</button></div></div>' +
+        aiCoachDiagnosisHTML() +
+        '</div>';
     }
     var qualify = r.marks + 0.0001 >= 9;
     var full = r.marks + 0.0001 >= 25;
@@ -2236,6 +2336,10 @@
       var plan = KD.planCoach(store.touch, store.misses, store.touch.rest);
       if (plan) startCoach(plan);
       else act("continue");
+      return;
+    }
+    if (name === "start-ai-drill") {
+      startAIDrill();
       return;
     }
     if (name === "placement") {
@@ -2405,7 +2509,9 @@
       act("continue");
       return;
     }
-    var wordList = KD.wordsForWeakness ? KD.wordsForWeakness(plan.id, 16) : [];
+    var wordList = (store.coach && store.coach.drill && store.coach.drill.length)
+      ? store.coach.drill.map(function (w) { return { h: w, k: KD.unicodeToKruti(w) }; })
+      : (KD.wordsForWeakness ? KD.wordsForWeakness(plan.id, 16) : []);
     var tokens = [];
     if (wordList && wordList.length >= 4) {
       tokens.push({ k: seq, h: face });
@@ -2424,11 +2530,13 @@
     var meta = KD.BY_CODE[code];
     var finger = meta && KD.FINGERS[meta.finger] ? KD.FINGERS[meta.finger].name : "The target finger";
     var latency = plan.avg ? Math.round(plan.avg) + "ms" : "high latency";
-    var teach = plan.fromMiss
-      ? "AI Diagnosis: " + face + " was missed often. Typing it inside high-frequency exam words to build automatic muscle memory."
-      : (plan.kind === "pair"
-        ? "AI Diagnosis: You take " + latency + " on this letter transition. Type each word in one fluid breath to cut micro-hesitations."
-        : "AI Diagnosis: Your response time on " + face + " is " + latency + " (lagging behind home row). Practice these words to build sub-300ms reflex.");
+    var teach = (store.coach && store.coach.note)
+      ? ("🤖 AI Diagnosis: " + store.coach.note)
+      : (plan.fromMiss
+        ? "AI Diagnosis: " + face + " was missed often. Typing it inside high-frequency exam words to build automatic muscle memory."
+        : (plan.kind === "pair"
+          ? "AI Diagnosis: You take " + latency + " on this letter transition. Type each word in one fluid breath to cut micro-hesitations."
+          : "AI Diagnosis: Your response time on " + face + " is " + latency + " (lagging behind home row). Practice these words to build sub-300ms reflex."));
     session = {
       kind: "exact",
       phase: "intro",

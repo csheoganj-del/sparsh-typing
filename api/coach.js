@@ -3,7 +3,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
-const coachPrompt = "You coach one Hindi Kruti Dev typist for the RSSB exam. The user message is their finger profile: slow keys, slow pairs, misses, and words they got wrong. Reply with JSON only, no markdown: {\"note\":\"one English sentence naming the slow finger or the ending to trust\",\"repeat\":[\"words copied from bank only\"]}. The note is English. Words inside repeat stay Hindi and must be copied from bank. Prefer है, हैं, था, थी, थे, and the long-ā ending when those show up as slow or wrong. Do not invent letters. Do not mention Alt.";
+const coachPrompt = "You are an expert Hindi touch typing tutor for the RSSB clerk recruitment exam (Remington GAIL / DevLys 010 keyboard). You analyze the typist's real-time latency profile (slow keys, sticking key-pairs, and missed keys). Reply with VALID JSON only, no markdown: {\"note\":\"one concise, encouraging English sentence naming the exact slow finger and physical muscle memory tip\",\"drill\":[\"8 to 10 common real Hindi words using those exact weak letters/matras\"]}. Do not invent invalid characters. Do not mention Alt codes.";
 
 function getGeminiKey() {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim();
@@ -39,6 +39,14 @@ function planFromModel(text, bank, source) {
   var data;
   try { data = JSON.parse(raw.slice(start, end + 1)); } catch (e) { return null; }
   if (!data || typeof data.note !== "string" || !data.note.trim()) return null;
+
+  var drill = [];
+  if (Array.isArray(data.drill)) {
+    data.drill.forEach(function (w) {
+      if (typeof w === "string" && w.trim() && drill.length < 12) drill.push(w.trim());
+    });
+  }
+
   var allow = {};
   (bank || []).forEach(function (w) { allow[w] = 1; });
   var repeat = [];
@@ -47,7 +55,13 @@ function planFromModel(text, bank, source) {
       if (typeof w === "string" && allow[w] && repeat.length < 8) repeat.push(w);
     });
   }
-  return { note: data.note.trim().slice(0, 280), repeat: repeat, source: source || "gemini" };
+
+  return {
+    note: data.note.trim().slice(0, 320),
+    drill: drill.length ? drill : null,
+    repeat: repeat,
+    source: source || "gemini"
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -72,16 +86,19 @@ module.exports = async function handler(req, res) {
   const payload = JSON.stringify({
     systemInstruction: { parts: [{ text: coachPrompt }] },
     contents: [{ parts: [{ text: JSON.stringify(profile || {}) }] }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 400, responseMimeType: "application/json" }
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 1000,
+      thinkingConfig: { thinkingBudget: 0 }
+    }
   });
 
   const upReq = https.request({
     hostname: "generativelanguage.googleapis.com",
-    path: "/v1beta/models/gemini-1.5-flash:generateContent",
+    path: "/v1beta/models/gemini-2.5-flash:generateContent?key=" + encodeURIComponent(key),
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-goog-api-key": key,
       "Content-Length": Buffer.byteLength(payload)
     }
   }, function (upRes) {
