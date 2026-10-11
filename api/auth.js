@@ -33,11 +33,13 @@ module.exports = async function handler(req, res) {
     return res.end();
   }
 
-  const url = (req.url || "").split("?")[0];
-  const queryAction = req.query && req.query.action;
-  const isLogin = url.endsWith("/login") || queryAction === "login";
-  const isRegister = url.endsWith("/register") || queryAction === "register";
-  const isMe = url.endsWith("/me") || queryAction === "me";
+  const fullUrl = req.url || "";
+  const [pathname, search] = fullUrl.split("?");
+  const searchParams = search ? new URLSearchParams(search) : null;
+  const queryAction = (req.query && req.query.action) || (searchParams ? searchParams.get("action") : null);
+  const isLogin = pathname.endsWith("/login") || pathname.endsWith("/login/") || queryAction === "login";
+  const isRegister = pathname.endsWith("/register") || pathname.endsWith("/register/") || queryAction === "register";
+  const isMe = pathname.endsWith("/me") || pathname.endsWith("/me/") || queryAction === "me";
 
   if (req.method === "POST" && isLogin) {
     const body = await parseBody(req);

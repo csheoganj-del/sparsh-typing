@@ -4,3 +4,5 @@ gemini.key
 coach.key
 *.tmp
 *.log
+
+.vercel
