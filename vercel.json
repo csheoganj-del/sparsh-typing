@@ -1,16 +1,11 @@
 {
   "version": 2,
-  "rewrites": [
-    { "source": "/api/auth/:path*", "destination": "/api/auth?action=:path*" },
-    { "source": "/api/progress", "destination": "/api/progress" },
-    { "source": "/api/coach", "destination": "/api/coach" }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
-      ]
-    }
+  "routes": [
+    { "src": "/api/auth/(.*)", "dest": "/api/auth.js?action=$1" },
+    { "src": "/api/auth", "dest": "/api/auth.js" },
+    { "src": "/api/progress", "dest": "/api/progress.js" },
+    { "src": "/api/coach", "dest": "/api/coach.js" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
