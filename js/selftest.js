@@ -357,6 +357,99 @@ if (!kept.live || kept.live.lesson.id !== "live-8" || !kept.live.resume || kept.
   console.log("FAIL resume kept", kept.live && kept.live.resume);
 }
 console.log("live", first.pattern, repair.pattern, ahead.pattern);
+const preferenceSource = { stars: {}, settings: { keyboard: false, hands: false, metrics: false, blockErrors: true, textSize: 32 } };
+const preferences = KD.mergeProgress(preferenceSource, null).settings;
+if (preferences.keyboard !== false || preferences.hands !== false || preferences.metrics !== false || preferences.blockErrors !== true || preferences.textSize !== 32) {
+  bad++;
+  console.log("FAIL typing preferences were lost during progress merge");
+}
+const mergedPreferences = KD.mergeProgress({ stars: { a: 3 }, settings: { keyboard: true, hands: false } }, preferenceSource).settings;
+if (mergedPreferences.keyboard !== true || mergedPreferences.hands !== false || mergedPreferences.blockErrors !== true) {
+  bad++;
+  console.log("FAIL preferred typing preferences did not survive cloud merge");
+}
+const sameBars = KD.starBars({ tries: {}, log: [], live: { past: [] } });
+if (sameBars.min !== 14 || sameBars.mid !== 22 || sameBars.high !== 32) {
+  bad++;
+  console.log("FAIL empty history keeps the starter bar", sameBars);
+}
+const fastTries = [];
+for (var n = 0; n < 6; n++) fastTries.push({ at: 1000 + n, wpm: 36, acc: 98, ms: 20000 });
+const fromHistory = KD.starBars({ tries: { "p-any": fastTries }, log: [], live: { past: [] } });
+if (fromHistory.high !== 36 || fromHistory.min !== 28 || fromHistory.mid !== 32) {
+  bad++;
+  console.log("FAIL bar should sit on recent speed", fromHistory);
+}
+if (KD.starsFor(36, 100, fromHistory) !== 5 || KD.starsFor(34, 100, fromHistory) !== 4) {
+  bad++;
+  console.log("FAIL five stars should need the new bar", KD.starsFor(36, 100, fromHistory), KD.starsFor(34, 100, fromHistory));
+}
+const heldBar = KD.starBars({ live: { past: [{ pattern: "history", stars: 4, high: 36, at: 5 }] } });
+const nextBar = KD.starBars({ live: { past: [{ pattern: "history", stars: 5, high: 36, at: 5 }] } });
+const capBar = KD.starBars({ live: { past: [{ pattern: "history", stars: 5, high: 40, at: 5 }] } });
+if (heldBar.high !== 36 || nextBar.high !== 38 || nextBar.min !== 30 || capBar.high !== 40) {
+  bad++;
+  console.log("FAIL bar step", heldBar, nextBar, capBar);
+}
+const repairBar = KD.starBars({ tries: { "repair-x": [{ at: 9, wpm: 80, acc: 100, ms: 30000 }] } });
+if (repairBar.high !== 32) {
+  bad++;
+  console.log("FAIL repair drill moved the bar", repairBar);
+}
+const generated = KD.historyLesson({
+  misses: { KeyD: 40, Space: 80 },
+  touch: { keys: {}, pairs: {} },
+  tries: { "p-any": fastTries },
+  live: { past: [] }
+});
+const examSentences = [
+  "यह काम पूरा था।", "पत्र का उत्तर देना था।", "बैठक आज थी।", "बच्चे वहां खेल रहे थे।",
+  "योजना लागू की गई है।", "उसने सही जवाब दिया।", "काम समय पर हुआ है।", "लोगों को जानकारी देनी है।",
+  "वह कल आया था।", "रिपोर्ट तैयार थी।", "किसान ने खेत में पानी दिया।", "कार्यालय आज बंद था।",
+  "नया नियम कल से लागू है।", "उसे पुरस्कार मिला था।", "माता घर पर थी।", "स्वास्थ्य केंद्र खुला है।",
+  "कृपया यह पत्र पढ़ें।", "सड़क पर वाहन धीमे थे।", "वर्ष के अंत में रिपोर्ट देनी थी।",
+  "प्रधान ने बैठक बुलाई है।", "कर्मचारी समय पर पहुंचे थे।", "आदेश कल जारी हुआ था।"
+];
+const generatedText = (generated.tokens || []).map(function (t) { return t.h; }).join(" ");
+function intactExam(text) {
+  if (examSentences.indexOf(text) >= 0) return true;
+  for (var i = 0; i < examSentences.length; i++) {
+    var head = examSentences[i] + " ";
+    if (text.indexOf(head) === 0 && examSentences.indexOf(text.slice(head.length)) >= 0) return true;
+  }
+  return false;
+}
+if (generated.pattern !== "history" || generated.high !== 36 || generated.teach.indexOf("exam sentence") < 0 || !intactExam(generatedText)) {
+  bad++;
+  console.log("FAIL history lesson", generated.pattern, generated.high, generatedText);
+}
+let generatedAlt = 0;
+(generated.tokens || []).forEach(function (tok) {
+  KD.stepsFromKruti(tok.k).forEach(function (st) {
+    if (!st || st.type === "alt" || st.code === "UNMAPPED") generatedAlt++;
+  });
+});
+if (generatedAlt) {
+  bad++;
+  console.log("FAIL history lesson key", generatedAlt);
+}
+const repeatLesson = KD.historyLesson({
+  misses: { KeyD: 40, Space: 80 },
+  touch: { keys: {}, pairs: {} },
+  live: { past: [{ pattern: "history", stars: 3, high: 36, words: ["का", "के"], slips: ["का"], at: 1 }] }
+});
+if (repeatLesson.high !== 36 || repeatLesson.tokens.map(function (t) { return t.h; }).join("|") !== "का|के") {
+  bad++;
+  console.log("FAIL history replay", repeatLesson.high, repeatLesson.tokens && repeatLesson.tokens.map(function (t) { return t.h; }).join("|"));
+}
+if (KD.courseComplete({ stars: {} })) {
+  bad++;
+  console.log("FAIL course looked complete inside the live ladder");
+}
+if (first.pattern !== "common" || first.high !== 32) {
+  bad++;
+  console.log("FAIL starter live bar changed", first.pattern, first.high);
+}
 console.log("word lessons", wordLessons.map(function (l) { return l.id; }).join(", "));
 console.log(bad === 0 ? "ALL GOOD" : bad + " failures");
 process.exit(bad === 0 ? 0 : 1);

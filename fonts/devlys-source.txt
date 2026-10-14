@@ -1,0 +1,13 @@
+DevLys 010 Normal.ttf: downloaded 2026-10-13 from Rajasthan Government RajKaj.
+Source page: https://rajkaj.rajasthan.gov.in/downloads.php/1000
+Archive: https://rajkaj.rajasthan.gov.in/uploads/devlys_010_normal_font_1645178382.zip
+The font is embedded unchanged as devlys-010.ttf.
+SHA-256: 2054a3a013d0c00d2e9628ff5d401f843c7ad6721a698e56dbc3cc1f7a9757eb
+
+Exam baseline: RSSB Clerk Grade-II / Junior Assistant Phase-II instructions,
+12 December 2024, pages 2-4. Requires standard keyboard and DevLys 010;
+illustrative key chart is not definitive. Alt/Control disallowed in speed test;
+Space/Enter locks the previous word. Key sequence errors receive no credit.
+https://rsmssb.rajasthan.gov.in/link_to_external_file/LDC24_TypingTestGuid_12122024.pdf
+
+These are the verified 2024 rules. A 2026 Phase-II notice has not been verified.

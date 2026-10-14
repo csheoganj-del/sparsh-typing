@@ -4,7 +4,10 @@
   "description": "TypingClub-style Hindi (Kruti Dev / DevLys 010) touch typing tutor for RSSB LDC (Clerk Grade-II) direct recruitment exam with AI weakness coach and cloud sync.",
   "scripts": {
     "start": "node local-server.js",
-    "test": "node js/selftest.js"
+    "test": "node js/selftest.js && node scripts/test-teaching.cjs && node scripts/test-learning-model.cjs && node scripts/test-preview-storage.cjs && node scripts/test-practice.cjs && node scripts/test-cloud.cjs && node scripts/test-devlys.cjs && node scripts/test-course-text.cjs",
+    "test:preview": "node scripts/test-preview-storage.cjs",
+    "test:teaching": "node scripts/test-teaching.cjs",
+    "test:learning": "node scripts/test-learning-model.cjs"
   },
   "keywords": [
     "typing",
@@ -17,6 +20,9 @@
   "author": "Kalpesh Deora",
   "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "24.x"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.8.1"
   }
 }

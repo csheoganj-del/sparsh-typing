@@ -1,0 +1,569 @@
+{
+  "source": "https://rajkaj.rajasthan.gov.in/utilities/font-convertor.php",
+  "rows": [
+    {
+      "code": "Backquote",
+      "shift": false,
+      "raw": "`",
+      "official": "ृ"
+    },
+    {
+      "code": "Backquote",
+      "shift": true,
+      "raw": "~",
+      "official": "्"
+    },
+    {
+      "code": "Digit1",
+      "shift": false,
+      "raw": "1",
+      "official": "1"
+    },
+    {
+      "code": "Digit1",
+      "shift": true,
+      "raw": "!",
+      "official": "!"
+    },
+    {
+      "code": "Digit2",
+      "shift": false,
+      "raw": "2",
+      "official": "2"
+    },
+    {
+      "code": "Digit2",
+      "shift": true,
+      "raw": "@",
+      "official": "/"
+    },
+    {
+      "code": "Digit3",
+      "shift": false,
+      "raw": "3",
+      "official": "3"
+    },
+    {
+      "code": "Digit3",
+      "shift": true,
+      "raw": "#",
+      "official": "रु"
+    },
+    {
+      "code": "Digit4",
+      "shift": false,
+      "raw": "4",
+      "official": "4"
+    },
+    {
+      "code": "Digit4",
+      "shift": true,
+      "raw": "$",
+      "official": "$"
+    },
+    {
+      "code": "Digit5",
+      "shift": false,
+      "raw": "5",
+      "official": "5"
+    },
+    {
+      "code": "Digit5",
+      "shift": true,
+      "raw": "%",
+      "official": "ः"
+    },
+    {
+      "code": "Digit6",
+      "shift": false,
+      "raw": "6",
+      "official": "6"
+    },
+    {
+      "code": "Digit6",
+      "shift": true,
+      "raw": "^",
+      "official": "‘"
+    },
+    {
+      "code": "Digit7",
+      "shift": false,
+      "raw": "7",
+      "official": "7"
+    },
+    {
+      "code": "Digit7",
+      "shift": true,
+      "raw": "&",
+      "official": "-"
+    },
+    {
+      "code": "Digit8",
+      "shift": false,
+      "raw": "8",
+      "official": "8"
+    },
+    {
+      "code": "Digit8",
+      "shift": true,
+      "raw": "*",
+      "official": "’"
+    },
+    {
+      "code": "Digit9",
+      "shift": false,
+      "raw": "9",
+      "official": "9"
+    },
+    {
+      "code": "Digit9",
+      "shift": true,
+      "raw": "(",
+      "official": ";"
+    },
+    {
+      "code": "Digit0",
+      "shift": false,
+      "raw": "0",
+      "official": "0"
+    },
+    {
+      "code": "Digit0",
+      "shift": true,
+      "raw": ")",
+      "official": "द्ध"
+    },
+    {
+      "code": "Minus",
+      "shift": false,
+      "raw": "-",
+      "official": "."
+    },
+    {
+      "code": "Minus",
+      "shift": true,
+      "raw": "_",
+      "official": "ऋ"
+    },
+    {
+      "code": "Equal",
+      "shift": false,
+      "raw": "=",
+      "official": "त्र"
+    },
+    {
+      "code": "Equal",
+      "shift": true,
+      "raw": "+",
+      "official": "़"
+    },
+    {
+      "code": "KeyQ",
+      "shift": false,
+      "raw": "q",
+      "official": "ु"
+    },
+    {
+      "code": "KeyQ",
+      "shift": true,
+      "raw": "Q",
+      "official": "फ"
+    },
+    {
+      "code": "KeyW",
+      "shift": false,
+      "raw": "w",
+      "official": "ू"
+    },
+    {
+      "code": "KeyW",
+      "shift": true,
+      "raw": "W",
+      "official": "ॅ"
+    },
+    {
+      "code": "KeyE",
+      "shift": false,
+      "raw": "e",
+      "official": "म"
+    },
+    {
+      "code": "KeyE",
+      "shift": true,
+      "raw": "E",
+      "official": "म्"
+    },
+    {
+      "code": "KeyR",
+      "shift": false,
+      "raw": "r",
+      "official": "त"
+    },
+    {
+      "code": "KeyR",
+      "shift": true,
+      "raw": "R",
+      "official": "त्"
+    },
+    {
+      "code": "KeyT",
+      "shift": false,
+      "raw": "t",
+      "official": "ज"
+    },
+    {
+      "code": "KeyT",
+      "shift": true,
+      "raw": "T",
+      "official": "ज्"
+    },
+    {
+      "code": "KeyY",
+      "shift": false,
+      "raw": "y",
+      "official": "ल"
+    },
+    {
+      "code": "KeyY",
+      "shift": true,
+      "raw": "Y",
+      "official": "ल्"
+    },
+    {
+      "code": "KeyU",
+      "shift": false,
+      "raw": "u",
+      "official": "न"
+    },
+    {
+      "code": "KeyU",
+      "shift": true,
+      "raw": "U",
+      "official": "न्"
+    },
+    {
+      "code": "KeyI",
+      "shift": false,
+      "raw": "i",
+      "official": "प"
+    },
+    {
+      "code": "KeyI",
+      "shift": true,
+      "raw": "I",
+      "official": "प्"
+    },
+    {
+      "code": "KeyO",
+      "shift": false,
+      "raw": "o",
+      "official": "व"
+    },
+    {
+      "code": "KeyO",
+      "shift": true,
+      "raw": "O",
+      "official": "व्"
+    },
+    {
+      "code": "KeyP",
+      "shift": false,
+      "raw": "p",
+      "official": "च"
+    },
+    {
+      "code": "KeyP",
+      "shift": true,
+      "raw": "P",
+      "official": "च्"
+    },
+    {
+      "code": "BracketLeft",
+      "shift": false,
+      "raw": "[",
+      "official": "ख्"
+    },
+    {
+      "code": "BracketLeft",
+      "shift": true,
+      "raw": "{",
+      "official": "क्ष्"
+    },
+    {
+      "code": "BracketRight",
+      "shift": false,
+      "raw": "]",
+      "official": ","
+    },
+    {
+      "code": "BracketRight",
+      "shift": true,
+      "raw": "}",
+      "official": "द्व"
+    },
+    {
+      "code": "Backslash",
+      "shift": false,
+      "raw": "\\",
+      "official": "?"
+    },
+    {
+      "code": "Backslash",
+      "shift": true,
+      "raw": "|",
+      "official": "द्य"
+    },
+    {
+      "code": "KeyA",
+      "shift": false,
+      "raw": "a",
+      "official": "ं"
+    },
+    {
+      "code": "KeyA",
+      "shift": true,
+      "raw": "A",
+      "official": "।"
+    },
+    {
+      "code": "KeyS",
+      "shift": false,
+      "raw": "s",
+      "official": "े"
+    },
+    {
+      "code": "KeyS",
+      "shift": true,
+      "raw": "S",
+      "official": "ै"
+    },
+    {
+      "code": "KeyD",
+      "shift": false,
+      "raw": "d",
+      "official": "क"
+    },
+    {
+      "code": "KeyD",
+      "shift": true,
+      "raw": "D",
+      "official": "क्"
+    },
+    {
+      "code": "KeyF",
+      "shift": false,
+      "raw": "f",
+      "official": "ि"
+    },
+    {
+      "code": "KeyF",
+      "shift": true,
+      "raw": "F",
+      "official": "थ्"
+    },
+    {
+      "code": "KeyG",
+      "shift": false,
+      "raw": "g",
+      "official": "ह"
+    },
+    {
+      "code": "KeyG",
+      "shift": true,
+      "raw": "G",
+      "official": "ळ"
+    },
+    {
+      "code": "KeyH",
+      "shift": false,
+      "raw": "h",
+      "official": "ी"
+    },
+    {
+      "code": "KeyH",
+      "shift": true,
+      "raw": "H",
+      "official": "भ्"
+    },
+    {
+      "code": "KeyJ",
+      "shift": false,
+      "raw": "j",
+      "official": "र"
+    },
+    {
+      "code": "KeyJ",
+      "shift": true,
+      "raw": "J",
+      "official": "श्र"
+    },
+    {
+      "code": "KeyK",
+      "shift": false,
+      "raw": "k",
+      "official": "ा"
+    },
+    {
+      "code": "KeyK",
+      "shift": true,
+      "raw": "K",
+      "official": "ज्ञ"
+    },
+    {
+      "code": "KeyL",
+      "shift": false,
+      "raw": "l",
+      "official": "स"
+    },
+    {
+      "code": "KeyL",
+      "shift": true,
+      "raw": "L",
+      "official": "स्"
+    },
+    {
+      "code": "Semicolon",
+      "shift": false,
+      "raw": ";",
+      "official": "य"
+    },
+    {
+      "code": "Semicolon",
+      "shift": true,
+      "raw": ":",
+      "official": "रू"
+    },
+    {
+      "code": "Quote",
+      "shift": false,
+      "raw": "'",
+      "official": "श्"
+    },
+    {
+      "code": "Quote",
+      "shift": true,
+      "raw": "\"",
+      "official": "ष्"
+    },
+    {
+      "code": "KeyZ",
+      "shift": false,
+      "raw": "z",
+      "official": "्र"
+    },
+    {
+      "code": "KeyZ",
+      "shift": true,
+      "raw": "Z",
+      "official": "Z"
+    },
+    {
+      "code": "KeyX",
+      "shift": false,
+      "raw": "x",
+      "official": "ग"
+    },
+    {
+      "code": "KeyX",
+      "shift": true,
+      "raw": "X",
+      "official": "ग्"
+    },
+    {
+      "code": "KeyC",
+      "shift": false,
+      "raw": "c",
+      "official": "ब"
+    },
+    {
+      "code": "KeyC",
+      "shift": true,
+      "raw": "C",
+      "official": "ब्"
+    },
+    {
+      "code": "KeyV",
+      "shift": false,
+      "raw": "v",
+      "official": "अ"
+    },
+    {
+      "code": "KeyV",
+      "shift": true,
+      "raw": "V",
+      "official": "ट"
+    },
+    {
+      "code": "KeyB",
+      "shift": false,
+      "raw": "b",
+      "official": "इ"
+    },
+    {
+      "code": "KeyB",
+      "shift": true,
+      "raw": "B",
+      "official": "ठ"
+    },
+    {
+      "code": "KeyN",
+      "shift": false,
+      "raw": "n",
+      "official": "द"
+    },
+    {
+      "code": "KeyN",
+      "shift": true,
+      "raw": "N",
+      "official": "छ"
+    },
+    {
+      "code": "KeyM",
+      "shift": false,
+      "raw": "m",
+      "official": "उ"
+    },
+    {
+      "code": "KeyM",
+      "shift": true,
+      "raw": "M",
+      "official": "ड"
+    },
+    {
+      "code": "Comma",
+      "shift": false,
+      "raw": ",",
+      "official": "ए"
+    },
+    {
+      "code": "Comma",
+      "shift": true,
+      "raw": "<",
+      "official": "ढ"
+    },
+    {
+      "code": "Period",
+      "shift": false,
+      "raw": ".",
+      "official": "ण्"
+    },
+    {
+      "code": "Period",
+      "shift": true,
+      "raw": ">",
+      "official": "झ"
+    },
+    {
+      "code": "Slash",
+      "shift": false,
+      "raw": "/",
+      "official": "ध्"
+    },
+    {
+      "code": "Slash",
+      "shift": true,
+      "raw": "?",
+      "official": "घ्"
+    }
+  ]
+}

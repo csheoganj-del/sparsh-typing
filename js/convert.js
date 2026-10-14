@@ -115,7 +115,8 @@
 
   /* Unicode → finger keys. Longer clusters first.
      These are the keys a typist actually strikes, not the Alt-byte shortcuts.
-     Alt bytes still decode in krutiToUnicode, so the exam accepts both. */
+     Alt bytes decode for imported documents only. RSSB speed practice does
+     not accept Alt entry or alternate byte sequences that merely look alike. */
   var uniToKrutiPairs = [
     ["रू", ":"],
     ["रु", "#"],

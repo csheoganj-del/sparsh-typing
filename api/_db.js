@@ -1,242 +1,92 @@
-// Cloud & Local Storage + Auth Adapter for Sparsh Typing Tutor
-const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
-
-const JWT_SECRET = process.env.JWT_SECRET || process.env.AUTH_SECRET || "sparsh-typing-rssb-secret-2026";
-const ROOT = path.resolve(__dirname, "..");
-const LOCAL_PROGRESS_FILE = path.join(ROOT, "progress", "sparsh-rssb-v1.json");
-const LOCAL_USERS_FILE = path.join(ROOT, "progress", "users.json");
-
-// Check if Upstash Redis / Vercel KV is configured
-const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
-async function kvGet(key) {
-  if (!KV_URL || !KV_TOKEN) return null;
-  try {
-    const res = await fetch(`${KV_URL}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${KV_TOKEN}` },
-      cache: "no-store"
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || data.result == null) return null;
-    return typeof data.result === "string" ? JSON.parse(data.result) : data.result;
-  } catch (err) {
-    console.error("KV get error for key:", key, err.message);
-    return null;
-  }
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const ROOT = path.resolve(__dirname, '..');
+const PREVIEW = process.env.PROGRESS_FILE ? path.resolve(process.env.PROGRESS_FILE) : null;
+const CLOUD = !PREVIEW && !!(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
+const HOSTED = process.env.VERCEL === '1';
+const SECRET = process.env.JWT_SECRET || process.env.AUTH_SECRET || (!HOSTED ? crypto.randomBytes(48).toString('hex') : null);
+const ITERATIONS = 210000;
+for (const f of ['engine', 'teaching', 'profile', 'practice']) require('../js/' + f);
+function username(value) {
+  const name = String(value || '').trim().toLowerCase();
+  if (!/^[a-z0-9_-]{3,32}$/.test(name)) throw new Error('Use 3–32 letters, numbers, underscores or hyphens for your username.');
+  return name;
 }
-
-async function kvSet(key, value) {
-  if (!KV_URL || !KV_TOKEN) return false;
-  try {
-    const res = await fetch(`${KV_URL}/set/${encodeURIComponent(key)}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${KV_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify(typeof value === "string" ? value : JSON.stringify(value))
-    });
-    return res.ok;
-  } catch (err) {
-    console.error("KV set error for key:", key, err.message);
-    return false;
-  }
+function empty() { return {stars:{},placed:{},misses:{},settings:{sound:true,hints:true},touch:{keys:{},pairs:{}},log:[],tries:{}}; }
+function read(file, fallback) { try { return JSON.parse(fs.readFileSync(file,'utf8')); } catch { return fallback; } }
+function write(file, data) { fs.mkdirSync(path.dirname(file),{recursive:true}); fs.writeFileSync(file,JSON.stringify(data,null,2)); }
+function requireStorage() { if (HOSTED && (!CLOUD || !SECRET)) throw new Error('Cloud storage is not configured.'); }
+function passwordHash(password, salt, iterations = ITERATIONS) { return crypto.pbkdf2Sync(password,salt,iterations,64,'sha512').toString('hex'); }
+function createToken(name) {
+  if (!SECRET) throw new Error('Authentication is not configured.');
+  const data = username(name) + ':' + (Date.now()+30*86400000);
+  return Buffer.from(data+':'+crypto.createHmac('sha256',SECRET).update(data).digest('hex')).toString('base64url');
 }
-
-// Local file helpers (safe on local machine, graceful on Vercel)
-function readLocalJson(filePath, fallback = {}) {
-  try {
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf8");
-      return JSON.parse(content);
-    }
-  } catch (e) {}
-  return fallback;
-}
-
-function writeLocalJson(filePath, data) {
-  try {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-// In-memory fallback if Vercel has no KV attached yet
-const memoryStore = {};
-
-function hashPassword(password, salt) {
-  return crypto.pbkdf2Sync(password, salt, 10000, 64, "sha512").toString("hex");
-}
-
-function createToken(username) {
-  const exp = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days
-  const data = `${username}:${exp}`;
-  const sig = crypto.createHmac("sha256", JWT_SECRET).update(data).digest("hex");
-  return Buffer.from(`${data}:${sig}`).toString("base64url");
-}
-
 function verifyToken(token) {
-  if (!token) return null;
+  if (!SECRET || !token || token.length > 512) return null;
   try {
-    const raw = Buffer.from(token, "base64url").toString("utf8");
-    const parts = raw.split(":");
-    if (parts.length !== 3) return null;
-    const [username, expStr, sig] = parts;
-    const exp = parseInt(expStr, 10);
-    if (Date.now() > exp) return null;
-    const expected = crypto.createHmac("sha256", JWT_SECRET).update(`${username}:${exp}`).digest("hex");
-    if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
-      return { username, exp };
-    }
-  } catch (e) {}
-  return null;
+    const [name, expires, sig, extra] = Buffer.from(token,'base64url').toString().split(':');
+    if (extra || !/^\d+$/.test(expires) || !/^[a-f0-9]{64}$/.test(sig) || Number(expires)<=Date.now()) return null;
+    username(name);
+    const expected = crypto.createHmac('sha256',SECRET).update(name+':'+expires).digest('hex');
+    return crypto.timingSafeEqual(Buffer.from(sig,'hex'),Buffer.from(expected,'hex')) ? {username:name,exp:Number(expires)} : null;
+  } catch { return null; }
 }
-
-async function getUser(username) {
-  const uname = String(username || "").trim().toLowerCase();
-  if (!uname) return null;
-
-  if (KV_URL && KV_TOKEN) {
-    const user = await kvGet(`user:${uname}:auth`);
-    if (user) return user;
-  }
-
-  const localUsers = readLocalJson(LOCAL_USERS_FILE, {});
-  if (localUsers[uname]) return localUsers[uname];
-
-  if (memoryStore[`user:${uname}:auth`]) {
-    return memoryStore[`user:${uname}:auth`];
-  }
-
-  // Pre-seed kalpesh account if none exists
-  if (uname === "kalpesh") {
-    const salt = crypto.randomBytes(16).toString("hex");
-    const defaultKalpesh = {
-      username: "kalpesh",
-      salt: salt,
-      hash: hashPassword("kalpesh123", salt),
-      role: "student",
-      createdAt: Date.now()
-    };
-    if (KV_URL && KV_TOKEN) await kvSet(`user:kalpesh:auth`, defaultKalpesh);
-    localUsers.kalpesh = defaultKalpesh;
-    writeLocalJson(LOCAL_USERS_FILE, localUsers);
-    memoryStore[`user:kalpesh:auth`] = defaultKalpesh;
-    return defaultKalpesh;
-  }
-
-  return null;
+async function blobRead(key) {
+  const result = await require('@vercel/blob').get(key,{access:'private',useCache:false,headers:{'Accept-Encoding':'identity'}});
+  if (!result) return null;
+  if (result.statusCode !== 200 || !result.stream) throw new Error('Could not read cloud data.');
+  return {data:await new Response(result.stream).json(),etag:result.blob.etag};
 }
-
-async function registerUser(username, password) {
-  const uname = String(username || "").trim().toLowerCase();
-  if (!uname || uname.length < 3) throw new Error("Username must be at least 3 characters");
-  if (!password || password.length < 4) throw new Error("Password must be at least 4 characters");
-
-  const existing = await getUser(uname);
-  if (existing) throw new Error("Username already taken. Please log in.");
-
-  const salt = crypto.randomBytes(16).toString("hex");
-  const userObj = {
-    username: uname,
-    salt: salt,
-    hash: hashPassword(password, salt),
-    role: "student",
-    createdAt: Date.now()
-  };
-
-  if (KV_URL && KV_TOKEN) {
-    await kvSet(`user:${uname}:auth`, userObj);
-  }
-
-  const localUsers = readLocalJson(LOCAL_USERS_FILE, {});
-  localUsers[uname] = userObj;
-  writeLocalJson(LOCAL_USERS_FILE, localUsers);
-  memoryStore[`user:${uname}:auth`] = userObj;
-
-  // Initialize progress by copying seed progress for kalpesh or starter progress
-  const seed = readLocalJson(LOCAL_PROGRESS_FILE, {
-    stars: {}, placed: {}, misses: {}, settings: { sound: true, hints: true, textSize: 25 },
-    touch: { keys: {}, pairs: {} }, log: [], tries: {}
-  });
-  await saveProgress(uname, seed);
-
-  return userObj;
+async function blobWrite(key, data, etag, create = false) {
+  return require('@vercel/blob').put(key,JSON.stringify(data),{access:'private',contentType:'application/json',addRandomSuffix:false,allowOverwrite:!create,cacheControlMaxAge:60,...(etag ? {ifMatch:etag} : {})});
 }
-
-async function loginUser(username, password) {
-  const uname = String(username || "").trim().toLowerCase();
-  const user = await getUser(uname);
-  if (!user) throw new Error("User not found. Please register or check username.");
-
-  const hashed = hashPassword(password, user.salt);
-  if (hashed !== user.hash) {
-    throw new Error("Invalid password.");
-  }
+async function getUser(value) {
+  requireStorage(); const name = username(value);
+  if (CLOUD) { const row=await blobRead('auth/'+name+'.json'); return row ? row.data : null; }
+  return read(path.join(ROOT,'progress','users.json'),{})[name] || null;
+}
+async function registerUser(value, password) {
+  requireStorage(); const name=username(value);
+  if (typeof password !== 'string' || password.length<10 || password.length>128) throw new Error('Use a password with 10–128 characters.');
+  if (await getUser(name)) throw new Error('Username already taken. Please sign in.');
+  const salt=crypto.randomBytes(16).toString('hex');
+  const user={username:name,salt,hash:passwordHash(password,salt),iterations:ITERATIONS,role:'student',createdAt:Date.now()};
+  if (CLOUD) {
+    try { await blobWrite('auth/'+name+'.json',user,null,true); }
+    catch (e) { if (e.name==='BlobAlreadyExistsError' || e.name==='BlobPreconditionFailedError') throw new Error('Username already taken. Please sign in.'); throw e; }
+  } else { const file=path.join(ROOT,'progress','users.json'), users=read(file,{}); users[name]=user; write(file,users); }
   return user;
 }
-
-async function getProgress(username) {
-  const uname = String(username || "kalpesh").trim().toLowerCase();
-
-  // Try Cloud KV
-  if (KV_URL && KV_TOKEN) {
-    const cloud = await kvGet(`user:${uname}:progress`);
-    if (cloud && cloud.stars) return cloud;
-  }
-
-  // Try in-memory
-  if (memoryStore[`user:${uname}:progress`]) {
-    return memoryStore[`user:${uname}:progress`];
-  }
-
-  // Try local user progress file
-  const userFile = path.join(ROOT, "progress", `user-${uname}.json`);
-  if (fs.existsSync(userFile)) {
-    return readLocalJson(userFile, null);
-  }
-
-  // Fallback to primary local progress
-  return readLocalJson(LOCAL_PROGRESS_FILE, {
-    stars: {}, placed: {}, misses: {}, settings: { sound: true, hints: true, textSize: 25 },
-    touch: { keys: {}, pairs: {} }, log: [], tries: {}
-  });
+async function loginUser(value, password) {
+  if (typeof password !== 'string' || password.length>128) throw new Error('Invalid username or password.');
+  const user=await getUser(value);
+  const actual=passwordHash(password,user ? user.salt : 'unknown-user',user ? (user.iterations || 10000) : ITERATIONS);
+  if (!user || !/^[a-f0-9]{128}$/.test(user.hash) || !crypto.timingSafeEqual(Buffer.from(actual,'hex'),Buffer.from(user.hash,'hex'))) throw new Error('Invalid username or password.');
+  return user;
 }
-
-async function saveProgress(username, progressData) {
-  const uname = String(username || "kalpesh").trim().toLowerCase();
-
-  // Save to Cloud KV
-  if (KV_URL && KV_TOKEN) {
-    await kvSet(`user:${uname}:progress`, progressData);
-  }
-
-  // Save to memory
-  memoryStore[`user:${uname}:progress`] = progressData;
-
-  // Save to local user file
-  const userFile = path.join(ROOT, "progress", `user-${uname}.json`);
-  writeLocalJson(userFile, progressData);
-
-  // If this is kalpesh, also keep sparsh-rssb-v1.json synced
-  if (uname === "kalpesh") {
-    writeLocalJson(LOCAL_PROGRESS_FILE, progressData);
-  }
-
-  return true;
+async function getProgress(value) {
+  if (PREVIEW) return read(PREVIEW,empty());
+  requireStorage(); const name=username(value);
+  if (CLOUD) { const row=await blobRead('progress/'+name+'.json'); return row ? row.data : empty(); }
+  const file=path.join(ROOT,'progress','user-'+name+'.json');
+  return read(file,name==='kalpesh' ? read(path.join(ROOT,'progress','sparsh-rssb-v1.json'),empty()) : empty());
 }
-
-module.exports = {
-  createToken,
-  verifyToken,
-  getUser,
-  registerUser,
-  loginUser,
-  getProgress,
-  saveProgress,
-  isCloudConnected: () => !!(KV_URL && KV_TOKEN)
-};
+async function saveProgress(value, data) {
+  if (PREVIEW) { write(PREVIEW,data); return data; }
+  requireStorage(); const name=username(value);
+  if (CLOUD) {
+    const key='progress/'+name+'.json';
+    for (let i=0;i<4;i++) {
+      const current=await blobRead(key), merged=global.KD.mergeProgress(data,current && current.data);
+      try { await blobWrite(key,merged,current && current.etag,!current); return merged; }
+      catch(e) { if (!['BlobPreconditionFailedError','BlobAlreadyExistsError'].includes(e.name) || i===3) throw e; }
+    }
+  }
+  const merged=global.KD.mergeProgress(data,await getProgress(name));
+  write(path.join(ROOT,'progress','user-'+name+'.json'),merged);
+  if (name==='kalpesh') write(path.join(ROOT,'progress','sparsh-rssb-v1.json'),merged);
+  return merged;
+}
+module.exports={createToken,verifyToken,getUser,registerUser,loginUser,getProgress,saveProgress,isCloudConnected:()=>CLOUD};

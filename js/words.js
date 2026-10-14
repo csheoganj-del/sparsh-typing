@@ -542,15 +542,222 @@
     };
   }
 
+  function lastHistory(store) {
+    var past = pastOf(store);
+    for (var i = past.length - 1; i >= 0; i--) {
+      if (past[i] && past[i].pattern === "history") return past[i];
+    }
+    return null;
+  }
+
+  function slipText(sl) {
+    if (!sl) return "";
+    if (typeof sl === "string") return sl;
+    return sl.word || sl.want || "";
+  }
+
+  function historyBank() {
+    var seen = {};
+    var bank = [];
+    (KD.LESSONS || []).forEach(function (lesson) {
+      (lesson.tokens || []).concat(lesson.bank || []).concat(lesson.reviewPool || []).forEach(function (tok) {
+        if (!tok || !tok.h || !tok.k || seen[tok.h]) return;
+        var steps = KD.stepsFromKruti(tok.k);
+        for (var i = 0; i < steps.length; i++) {
+          if (!steps[i] || steps[i].type === "alt" || steps[i].code === "UNMAPPED") return;
+        }
+        seen[tok.h] = 1;
+        bank.push({ h: tok.h, k: tok.k });
+      });
+    });
+    return bank;
+  }
+
+  function tokenFor(h, bank) {
+    if (!h || h === "Space") return null;
+    for (var i = 0; i < bank.length; i++) if (bank[i].h === h) return bank[i];
+    return KD.safeToken(h);
+  }
+
+  KD.courseComplete = function (store) {
+    if (typeof KD.lessonPassed !== "function") return false;
+    var lessons = KD.LESSONS || [];
+    if (!lessons.length) return false;
+    for (var i = 0; i < lessons.length; i++) {
+      if (!KD.lessonPassed(lessons[i], store || {})) return false;
+    }
+    return true;
+  };
+
+  KD.weakKeyNames = function (store) {
+    store = store || {};
+    var misses = store.misses || {};
+    var names = [];
+    if ((misses.Space || 0) >= 10) names.push("Space");
+    var rows = [];
+    Object.keys(misses).forEach(function (id) {
+      if (!KD.drillable(id) || !(misses[id] > 0)) return;
+      rows.push({ id: id, n: misses[id] });
+    });
+    rows.sort(function (a, b) { return b.n - a.n; });
+    rows.slice(0, 3).forEach(function (row) {
+      var label = typeof KD.actionLabel === "function" ? KD.actionLabel(row.id) : "";
+      if (label && names.indexOf(label) < 0) names.push(label);
+    });
+    return names.slice(0, 3);
+  };
+
+  function keyId(step) {
+    if (!step || step.type === "alt" || !step.code || step.code === "UNMAPPED" || step.code === "Space") return "";
+    return step.code + (step.shift ? "+S" : "");
+  }
+
+  function targetKeyIds(store) {
+    var misses = (store && store.misses) || {};
+    var rows = [];
+    Object.keys(misses).forEach(function (id) {
+      if (!KD.drillable(id) || !(misses[id] >= 2)) return;
+      rows.push({ id: id, n: misses[id] });
+    });
+    rows.sort(function (a, b) { return b.n - a.n; });
+    var ids = [];
+    rows.slice(0, 4).forEach(function (row) { ids.push(row.id); });
+    if (ids.length < 2 && KD.coachBoard) {
+      var slow = KD.coachBoard(store && store.touch).slowKeys || [];
+      slow.forEach(function (row) {
+        if (row && row.id && ids.indexOf(row.id) < 0 && ids.length < 4) ids.push(row.id);
+      });
+    }
+    return ids;
+  }
+
+  /* Real exam lines only: short clerical sentences, then the passage bank. */
+  function examLines() {
+    var lines = [];
+    var seen = {};
+    function add(words, passage) {
+      var line = [];
+      for (var i = 0; i < words.length; i++) {
+        var tok = KD.safeToken(words[i]);
+        if (!tok) return;
+        line.push(tok);
+      }
+      if (line.length < 3) return;
+      var sig = line.map(function (t) { return t.h; }).join(" ");
+      if (seen[sig]) return;
+      seen[sig] = 1;
+      lines.push({ line: line, passage: passage ? 1 : 0 });
+    }
+    flow.forEach(function (words) { add(words, 0); });
+    any.forEach(function (words) { add(words, 0); });
+    (KD.HI_SENTENCES || []).forEach(function (sentence) {
+      add(String(sentence).split(/\s+/).filter(Boolean), 1);
+    });
+    return lines;
+  }
+
+  function lineScore(line, ids) {
+    var hit = 0;
+    var covered = {};
+    line.forEach(function (tok) {
+      KD.stepsFromKruti(tok.k).forEach(function (step) {
+        var id = keyId(step);
+        if (!id || ids.indexOf(id) < 0) return;
+        hit++;
+        covered[id] = 1;
+      });
+    });
+    return { hit: hit, covered: Object.keys(covered).length };
+  }
+
+  function historyTokens(store, bank) {
+    var last = lastHistory(store);
+    if (last && (last.stars || 0) < 5 && Array.isArray(last.words) && last.words.length) {
+      var replay = [];
+      last.words.forEach(function (h) {
+        var tok = tokenFor(h, bank);
+        if (tok) replay.push({ h: tok.h, k: tok.k });
+      });
+      if (replay.length) return replay;
+    }
+    var ids = targetKeyIds(store);
+    var ranked = examLines().map(function (row, index) {
+      var score = lineScore(row.line, ids);
+      var length = row.line.length;
+      var limit = row.passage ? 16 : 12;
+      var fit = length >= 4 && length <= limit ? 1 : 0;
+      return { line: row.line, passage: row.passage, index: index, hit: score.hit, covered: score.covered, fit: fit, length: length };
+    });
+    ranked = ranked.filter(function (row) { return !ids.length || row.hit > 0; });
+    ranked.sort(function (a, b) {
+      return (b.covered - a.covered) || (b.passage - a.passage) || (b.fit - a.fit) || (b.hit - a.hit) || (a.length - b.length) || (a.index - b.index);
+    });
+    var seq = [];
+    var used = {};
+    for (var i = 0; i < ranked.length && seq.length < 8; i++) {
+      var line = ranked[i].line;
+      var sig = line.map(function (t) { return t.h; }).join(" ");
+      if (used[sig]) continue;
+      if (seq.length && seq.length + line.length > 18) continue;
+      used[sig] = 1;
+      line.forEach(function (tok) { seq.push({ h: tok.h, k: tok.k }); });
+      if (seq.length >= 7) break;
+    }
+    if (!seq.length && ranked.length) {
+      ranked[0].line.forEach(function (tok) { seq.push({ h: tok.h, k: tok.k }); });
+    }
+    return seq.slice(0, 18);
+  }
+
+  KD.historyLesson = function (store) {
+    store = store || {};
+    var bank = historyBank();
+    var bars = KD.starBars(store, { min: 14, mid: 22, high: 32, cap: 40, acc: 94 });
+    var names = KD.weakKeyNames(store);
+    var tokens = historyTokens(store, bank);
+    var past = pastOf(store);
+    var count = 0;
+    past.forEach(function (row) { if (row && row.pattern === "history") count++; });
+    var last = lastHistory(store);
+    var held = last && (last.stars || 0) < 5;
+    var who = names.length ? names.join(", ") : "the keys from your last lessons";
+    return {
+      id: "hist-" + (count + 1),
+      pattern: "history",
+      layer: "history",
+      title: "Exam sentence · " + (names[0] || "your keys") + " · " + bars.high + " WPM",
+      teach: "An exam sentence formed with " + who + ". The words stay in sentence order, the way a passage is dictated. Pass at " + bars.min + " WPM. Five stars needs " + bars.high + " WPM and " + bars.acc + "% accuracy. " +
+        (held ? "The last run was under five stars, so this sentence and this bar stay." : "A five-star run raises the next bar by 2 WPM, up to 40.") +
+        " Nothing new is added while you type.",
+      why: ["A real exam line that uses the keys you miss. Five stars at " + bars.high + " WPM."],
+      tokens: tokens,
+      words: tokens.map(function (t) { return t.h; }),
+      wordlock: false,
+      hints: "hindi",
+      acc: bars.acc,
+      min: bars.min,
+      mid: bars.mid,
+      high: bars.high,
+      finger: "Pass " + bars.min + " · five stars at " + bars.high
+    };
+  };
+
+  function ladderCleared(store) {
+    return patternCleared(store, patternById("lines"));
+  }
+
   KD.liveLabels = function (store) {
     store = store || {};
     var lesson = store.live && store.live.lesson;
     if (!lesson) return null;
-    return liveCopy(store, patternById(lesson.pattern) || PATTERNS[0]);
+    var pattern = patternById(lesson.pattern);
+    if (!pattern) return { title: lesson.title, teach: lesson.teach, why: lesson.why, finger: lesson.finger };
+    return liveCopy(store, pattern);
   };
 
   KD.composeLive = function (store) {
     store = store || {};
+    if (KD.courseComplete(store) || ladderCleared(store)) return KD.historyLesson(store);
     var past = pastOf(store);
     var pattern = choosePattern(store);
     var tokens = pattern.lines ? lineLesson(store) : (pattern.ch ? charLesson(pattern, store) : wordLesson(pattern, store));

@@ -6,3 +6,7 @@ coach.key
 *.log
 
 .vercel
+.env*
+
+.env*
+progress/user-*.json

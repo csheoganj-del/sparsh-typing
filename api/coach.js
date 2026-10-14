@@ -3,7 +3,7 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
-const coachPrompt = "You are an expert Hindi touch typing tutor for the RSSB clerk recruitment exam (Remington GAIL / DevLys 010 keyboard). You analyze the typist's real-time latency profile (slow keys, sticking key-pairs, and missed keys). Reply with VALID JSON only, no markdown: {\"note\":\"one concise, encouraging English sentence naming the exact slow finger and physical muscle memory tip\",\"drill\":[\"8 to 10 common real Hindi words using those exact weak letters/matras\"]}. Do not invent invalid characters. Do not mention Alt codes.";
+const coachPrompt = "You are an expert Hindi touch typing tutor for the RSSB clerk recruitment exam (standard physical keyboard with the legacy DevLys 010 font). Use the DevLys 010 key positions, not a Unicode input method. You analyze the typist's real-time latency profile (slow keys, sticking key-pairs, and missed keys). Reply with VALID JSON only, no markdown: {\"note\":\"one concise, encouraging English sentence naming the exact slow finger and physical muscle memory tip\",\"drill\":[\"8 to 10 common real Hindi words using those exact weak letters/matras\"]}. Do not invent invalid characters. Do not mention Alt codes.";
 
 function getGeminiKey() {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim();
@@ -65,6 +65,7 @@ function planFromModel(text, bank, source) {
 }
 
 module.exports = async function handler(req, res) {
+  if (process.env.VERCEL === "1" && !require("./_db").verifyToken((req.headers.authorization || "").replace(/^Bearer\s+/i, ""))) { res.statusCode = 401; res.setHeader("Content-Type", "application/json"); return res.end(JSON.stringify({error:"Sign in to use the cloud coach."})); }
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");

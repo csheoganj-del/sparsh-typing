@@ -1,0 +1,11 @@
+.git
+.vercel
+.env*
+*.key
+progress
+artifacts
+scripts
+VERCEL_DEPLOY.md
+start.bat
+local-server.js
+js/selftest.js

@@ -1,17 +1,86 @@
 (function (root) {
   var KD = root.KD = root.KD || {};
 
-  KD.starsFor = function (wpm, acc, lesson) {
+  KD.performanceFor = function (wpm, acc, lesson, realAcc) {
+    wpm = Math.max(0, Math.min(200, Number(wpm) || 0));
+    acc = Math.max(0, Math.min(100, Number(acc) || 0));
+    realAcc = realAcc == null ? acc : Math.max(0, Math.min(100, Number(realAcc) || 0));
+    if (lesson.scoreFree || acc < lesson.acc || wpm < lesson.min) return 0;
+    return Math.min(200, acc * realAcc * wpm / (100 * Math.max(1, lesson.high || 1)));
+  };
+  KD.starsFor = function (wpm, acc, lesson, realAcc) {
     acc = acc || 0;
     wpm = wpm || 0;
-    if (acc < 80) return 0;
-    if (acc < 90) return 1;
-    if (acc < lesson.acc) return 2;
-    if (wpm >= lesson.high && acc >= 98) return 5;
-    if (wpm >= lesson.mid && acc >= 96) return 4;
-    if (wpm >= lesson.min && acc >= lesson.acc) return 3;
-    if (acc >= lesson.acc) return 2;
-    return 1;
+    if (lesson.scoreFree) return 0;
+    if (acc < lesson.acc || wpm < lesson.min) return 0;
+    // The performance formula is public; equal 20-point star bands are our mapping.
+    return Math.max(1, Math.min(5, Math.floor(KD.performanceFor(wpm, acc, lesson, realAcc) / 20)));
+  };
+
+  /* Recent clean speed. Short repair drills and guided repeats do not set the next bar. */
+  KD.recentSpeeds = function (store) {
+    store = store || {};
+    var rows = [];
+    var seen = {};
+    function add(row, id) {
+      if (!row || typeof row !== "object" || !row.at) return;
+      var lessonId = id || row.id || "";
+      if (/^repair-/.test(lessonId) || row.scoreFree || row.guided) return;
+      var wpm = Number(row.wpm);
+      if (!(wpm > 0)) return;
+      var acc = row.acc == null ? row.realAcc : row.acc;
+      if (acc != null && Number(acc) < 94) return;
+      if (row.ms != null && Number(row.ms) < 8000) return;
+      if (seen[row.at]) return;
+      seen[row.at] = 1;
+      rows.push({ at: row.at, wpm: wpm });
+    }
+    (store.log || []).forEach(function (row) { add(row, row && row.id); });
+    var past = store.live && Array.isArray(store.live.past) ? store.live.past : [];
+    past.forEach(function (row) { add(row, row && row.id); });
+    var checks = store.practice40 && Array.isArray(store.practice40.attempts) ? store.practice40.attempts : [];
+    checks.forEach(function (row) { add(row, "practice40"); });
+    var tries = store.tries || {};
+    Object.keys(tries).forEach(function (id) {
+      (tries[id] || []).forEach(function (row) { add(row, id); });
+    });
+    rows.sort(function (a, b) { return a.at - b.at; });
+    return rows.slice(-8).map(function (row) { return row.wpm; });
+  };
+
+  /* The next five-star line. It starts at recent speed, then rises by 2 WPM
+     after a five-star history lesson, and it stops at the passage goal. */
+  KD.starBars = function (store, base) {
+    base = base || {};
+    var floorMin = base.min == null ? 14 : base.min;
+    var floorMid = base.mid == null ? 22 : base.mid;
+    var floorHigh = base.high == null ? 32 : base.high;
+    var cap = base.cap == null ? 40 : base.cap;
+    var acc = base.acc == null ? 94 : base.acc;
+    function pack(high) {
+      high = Math.round(high);
+      if (high > cap) high = cap;
+      if (high < floorMin + 4) high = floorMin + 4;
+      var min = high - 8;
+      if (min < floorMin) min = floorMin;
+      var mid = Math.round((min + high) / 2);
+      if (mid <= min) mid = min + 1;
+      if (mid >= high) mid = high - 1;
+      if (min >= mid) min = Math.max(1, mid - 1);
+      return { min: min, mid: mid, high: high, acc: acc };
+    }
+    var past = store && store.live && Array.isArray(store.live.past) ? store.live.past : [];
+    var last = null;
+    for (var i = past.length - 1; i >= 0; i--) {
+      if (past[i] && past[i].pattern === "history" && past[i].high) { last = past[i]; break; }
+    }
+    if (last) return pack((last.stars || 0) >= 5 ? last.high + 2 : last.high);
+    var speeds = KD.recentSpeeds(store);
+    if (!speeds.length) return { min: floorMin, mid: floorMid, high: floorHigh, acc: acc };
+    var ordered = speeds.slice().sort(function (a, b) { return a - b; });
+    var mid = Math.floor(ordered.length / 2);
+    var median = ordered.length % 2 ? ordered[mid] : (ordered[mid - 1] + ordered[mid]) / 2;
+    return pack(median);
   };
 
   KD.keyWpm = function (keys, ms) {
@@ -56,6 +125,7 @@
     list.push({
       at: attempt && attempt.at ? attempt.at : Date.now(),
       acc: attempt && attempt.acc ? attempt.acc : 0,
+      realAcc: attempt && attempt.realAcc != null ? attempt.realAcc : null,
       wpm: attempt && attempt.wpm ? attempt.wpm : 0,
       stars: attempt && attempt.stars ? attempt.stars : 0,
       marks: !attempt || attempt.marks == null ? null : attempt.marks,
@@ -79,6 +149,9 @@
       var s = raw && typeof raw === "object" && !Array.isArray(raw) ? copy(raw) : {};
       if (!s.stars || typeof s.stars !== "object" || Array.isArray(s.stars)) s.stars = {};
       if (!s.placed || typeof s.placed !== "object" || Array.isArray(s.placed)) s.placed = {};
+      if (!s.learned || typeof s.learned !== "object" || Array.isArray(s.learned)) s.learned = {};
+      if (!s.placedKeys || typeof s.placedKeys !== "object" || Array.isArray(s.placedKeys)) s.placedKeys = {};
+      if (!s.placedPairs || typeof s.placedPairs !== "object" || Array.isArray(s.placedPairs)) s.placedPairs = {};
       if (!s.misses || typeof s.misses !== "object" || Array.isArray(s.misses)) s.misses = {};
       if (!s.settings || typeof s.settings !== "object" || Array.isArray(s.settings)) s.settings = { sound: true, hints: true };
       if (typeof s.settings.sound !== "boolean") s.settings.sound = true;
@@ -121,6 +194,12 @@
       out.stars[id] = Math.max(out.stars[id] || 0, b.stars[id] || 0);
     });
     Object.keys(b.placed).forEach(function (id) { if (b.placed[id]) out.placed[id] = true; });
+    ['learned', 'placedKeys', 'placedPairs'].forEach(function (name) {
+      Object.keys(b[name]).forEach(function (id) { if (b[name][id]) out[name][id] = true; });
+    });
+    if (KD.mergeMastery) out.mastery = KD.mergeMastery(a.mastery, b.mastery);
+    if (KD.mergeProfile) out.profile = KD.mergeProfile(a.profile, b.profile);
+    if (KD.mergePractice40) out.practice40 = KD.mergePractice40(a.practice40, b.practice40);
     Object.keys(b.misses).forEach(function (id) {
       out.misses[id] = Math.max(out.misses[id] || 0, b.misses[id] || 0);
     });
@@ -233,6 +312,10 @@
     var picked = localPlayed ? a : b;
     var other = localPlayed ? b : a;
     out.settings = { sound: picked.settings.sound, hints: picked.settings.hints };
+    ["keyboard", "hands", "metrics", "blockErrors"].forEach(function (name) {
+      if (typeof picked.settings[name] === "boolean") out.settings[name] = picked.settings[name];
+      else if (typeof other.settings[name] === "boolean") out.settings[name] = other.settings[name];
+    });
     var textSize = textSizeOf(picked) || textSizeOf(other);
     if (textSize) out.settings.textSize = textSize;
     return out;

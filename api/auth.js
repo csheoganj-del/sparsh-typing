@@ -33,6 +33,7 @@ module.exports = async function handler(req, res) {
     return res.end();
   }
 
+  res.setHeader("Cache-Control", "private, no-store");
   const fullUrl = req.url || "";
   const [pathname, search] = fullUrl.split("?");
   const searchParams = search ? new URLSearchParams(search) : null;

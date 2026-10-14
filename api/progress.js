@@ -21,7 +21,7 @@ function getUsernameFromReq(req) {
   const authHeader = req.headers.authorization || "";
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
   const verified = db.verifyToken(token);
-  return verified ? verified.username : "kalpesh";
+  return verified ? verified.username : null;
 }
 
 module.exports = async function handler(req, res) {
@@ -40,7 +40,9 @@ module.exports = async function handler(req, res) {
     return res.end();
   }
 
+  res.setHeader("Cache-Control", "private, no-store");
   const username = getUsernameFromReq(req);
+  if (!username) { res.statusCode = 401; return res.json({ error: "Sign in to save and load your progress." }); }
 
   if (req.method === "GET") {
     try {
@@ -57,13 +59,13 @@ module.exports = async function handler(req, res) {
   if (req.method === "POST") {
     try {
       const data = await parseBody(req);
-      if (!data || typeof data !== "object" || !data.stars) {
+      if (!data || typeof data !== "object" || Array.isArray(data) || !data.stars || Array.isArray(data.stars) || JSON.stringify(data).length > 4000000) {
         res.statusCode = 400;
         return res.json({ error: "Invalid progress payload" });
       }
-      await db.saveProgress(username, data);
+      const progress = await db.saveProgress(username, data);
       res.statusCode = 200;
-      return res.json({ ok: true, cloud: db.isCloudConnected(), username: username });
+      return res.json({ ok: true, cloud: db.isCloudConnected(), username: username, progress: progress });
     } catch (err) {
       res.statusCode = 500;
       return res.json({ error: "Failed to save progress", details: err.message });

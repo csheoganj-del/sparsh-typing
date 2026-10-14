@@ -16,7 +16,9 @@ var types = {
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
-  ".svg": "image/svg+xml"
+  ".svg": "image/svg+xml",
+  ".ttf": "font/ttf",
+  ".woff2": "font/woff2"
 };
 
 function send(res, code, body, type) {
