@@ -72,61 +72,18 @@ var coachPrompt = "You coach one Hindi Kruti Dev typist for the RSSB exam. The u
 function askGemini(profile, cb) {
   var key = geminiKey();
   if (!key) return cb(null, { source: "fingers" });
-  var payload = JSON.stringify({
-    systemInstruction: { parts: [{ text: coachPrompt }] },
-    contents: [{ parts: [{ text: JSON.stringify(profile || {}) }] }],
-    generationConfig: { temperature: 0.3, maxOutputTokens: 400, responseMimeType: "application/json" }
+  require("./api/_models").complete(key, {
+    system: coachPrompt,
+    user: JSON.stringify(profile || {}),
+    temperature: 0.3,
+    maxOutputTokens: 400,
+    timeout: 20000,
+    limit: 3
+  }).then(function (asked) {
+    cb(null, planFromModel(asked.text, profile && profile.bank, "gemini") || { source: "fingers" });
+  }).catch(function () {
+    cb(null, { source: "fingers" });
   });
-  var settled = false;
-  function finish(plan) {
-    if (settled) return;
-    settled = true;
-    cb(null, plan || { source: "fingers" });
-  }
-  function once(attempt) {
-    var req = https.request({
-      hostname: "generativelanguage.googleapis.com",
-      path: "/v1beta/models/gemini-1.5-flash:generateContent",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": key,
-        "Content-Length": Buffer.byteLength(payload)
-      }
-    }, function (up) {
-      var chunks = [];
-      up.on("data", function (c) { chunks.push(c); });
-      up.on("end", function () {
-        var body = Buffer.concat(chunks).toString("utf8");
-        if ((up.statusCode === 429 || up.statusCode === 503) && attempt < 1) {
-          setTimeout(function () { once(attempt + 1); }, 2000);
-          return;
-        }
-        if (up.statusCode < 200 || up.statusCode >= 300) return finish({ source: "fingers" });
-        var parsed;
-        try { parsed = JSON.parse(body); } catch (e) { return finish({ source: "fingers" }); }
-        var text = "";
-        var parts = parsed.candidates && parsed.candidates[0] && parsed.candidates[0].content && parsed.candidates[0].content.parts;
-        (parts || []).forEach(function (part) { if (part && part.text) text += part.text; });
-        finish(planFromModel(text, profile && profile.bank, "gemini") || { source: "fingers" });
-      });
-    });
-    var aborted = false;
-    req.setTimeout(25000, function () {
-      aborted = true;
-      req.destroy();
-      if (attempt < 1) setTimeout(function () { once(attempt + 1); }, 500);
-      else finish({ source: "fingers" });
-    });
-    req.on("error", function () {
-      if (aborted) return;
-      if (attempt < 1 && !settled) setTimeout(function () { once(attempt + 1); }, 500);
-      else finish({ source: "fingers" });
-    });
-    req.write(payload);
-    req.end();
-  }
-  once(0);
 }
 
 function askGrok(profile, cb) {
@@ -215,6 +172,7 @@ var server = http.createServer(function (req, res) {
     var coachHandler = require("./api/coach");
     return coachHandler(req, res);
   }
+  if (url === '/api/sentences') return require('./api/sentences')(req,res);
   if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "method");
   var rel = decodeURIComponent(url);
   if (rel === "/") rel = "/index.html";

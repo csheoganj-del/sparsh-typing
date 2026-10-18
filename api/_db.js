@@ -3,7 +3,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const PREVIEW = process.env.PROGRESS_FILE ? path.resolve(process.env.PROGRESS_FILE) : null;
-const CLOUD = !PREVIEW && !!(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
+const SUPABASE = !PREVIEW && !!process.env.POSTGRES_URL;
+const TURSO = !PREVIEW && !SUPABASE && !!(process.env.TURSO_DATABASE_URL && process.env.TURSO_AUTH_TOKEN);
+const BLOB = !PREVIEW && !SUPABASE && !TURSO && !!(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
+const CLOUD = SUPABASE || TURSO || BLOB;
+function remote() {
+  if (SUPABASE) return require('./_supabase');
+  if (TURSO) return require('./_turso');
+  return null;
+}
 const HOSTED = process.env.VERCEL === '1';
 const SECRET = process.env.JWT_SECRET || process.env.AUTH_SECRET || (!HOSTED ? crypto.randomBytes(48).toString('hex') : null);
 const ITERATIONS = 210000;
@@ -33,18 +41,45 @@ function verifyToken(token) {
     return crypto.timingSafeEqual(Buffer.from(sig,'hex'),Buffer.from(expected,'hex')) ? {username:name,exp:Number(expires)} : null;
   } catch { return null; }
 }
+function cloudReadError(cause) {
+  const raw = String(cause && cause.message || '');
+  const status = Number((raw.match(/Failed to fetch blob:\s*(\d+)/) || [])[1]) || Number(cause && cause.status) || 0;
+  const suspended = (cause && cause.name) === 'BlobStoreSuspendedError' || /suspended/i.test(raw) || status === 402 || status === 403;
+  const err = new Error(suspended ? 'Cloud storage is paused.' : 'Could not read cloud data.' + (status ? ' (HTTP ' + status + ')' : ''));
+  err.code = suspended ? 'STORAGE_PAUSED' : 'BLOB_UNAVAILABLE';
+  if (status) err.status = status;
+  err.cause = cause;
+  return err;
+}
 async function blobRead(key) {
-  const result = await require('@vercel/blob').get(key,{access:'private',useCache:false,headers:{'Accept-Encoding':'identity'}});
+  let result;
+  try {
+    result = await require('@vercel/blob').get(key,{access:'private',useCache:false,headers:{'Accept-Encoding':'identity'}});
+  } catch (e) {
+    throw cloudReadError(e);
+  }
   if (!result) return null;
-  if (result.statusCode !== 200 || !result.stream) throw new Error('Could not read cloud data.');
-  return {data:await new Response(result.stream).json(),etag:result.blob.etag};
+  if (result.statusCode !== 200 || !result.stream) {
+    const err = new Error('Could not read cloud data.');
+    err.code = 'BLOB_UNAVAILABLE';
+    throw err;
+  }
+  const text = await new Response(result.stream).text();
+  try { return {data:JSON.parse(text),etag:result.blob.etag}; }
+  catch (e) {
+    const err = new Error('Cloud progress is unreadable.');
+    err.code = 'BLOB_CORRUPT';
+    err.etag = result.blob && result.blob.etag;
+    throw err;
+  }
 }
 async function blobWrite(key, data, etag, create = false) {
   return require('@vercel/blob').put(key,JSON.stringify(data),{access:'private',contentType:'application/json',addRandomSuffix:false,allowOverwrite:!create,cacheControlMaxAge:60,...(etag ? {ifMatch:etag} : {})});
 }
 async function getUser(value) {
   requireStorage(); const name = username(value);
-  if (CLOUD) { const row=await blobRead('auth/'+name+'.json'); return row ? row.data : null; }
+  if (remote()) return remote().getAccount(name);
+  if (BLOB) { const row=await blobRead('auth/'+name+'.json'); return row ? row.data : null; }
   return read(path.join(ROOT,'progress','users.json'),{})[name] || null;
 }
 async function registerUser(value, password) {
@@ -53,7 +88,8 @@ async function registerUser(value, password) {
   if (await getUser(name)) throw new Error('Username already taken. Please sign in.');
   const salt=crypto.randomBytes(16).toString('hex');
   const user={username:name,salt,hash:passwordHash(password,salt),iterations:ITERATIONS,role:'student',createdAt:Date.now()};
-  if (CLOUD) {
+  if (remote()) await remote().putAccount(name, user);
+  else if (BLOB) {
     try { await blobWrite('auth/'+name+'.json',user,null,true); }
     catch (e) { if (e.name==='BlobAlreadyExistsError' || e.name==='BlobPreconditionFailedError') throw new Error('Username already taken. Please sign in.'); throw e; }
   } else { const file=path.join(ROOT,'progress','users.json'), users=read(file,{}); users[name]=user; write(file,users); }
@@ -69,19 +105,52 @@ async function loginUser(value, password) {
 async function getProgress(value) {
   if (PREVIEW) return read(PREVIEW,empty());
   requireStorage(); const name=username(value);
-  if (CLOUD) { const row=await blobRead('progress/'+name+'.json'); return row ? row.data : empty(); }
+  if (remote()) { const row=await remote().getProgress(name); return row ? row.data : empty(); }
+  if (BLOB) { const row=await blobRead('progress/'+name+'.json'); return row ? row.data : empty(); }
   const file=path.join(ROOT,'progress','user-'+name+'.json');
   return read(file,name==='kalpesh' ? read(path.join(ROOT,'progress','sparsh-rssb-v1.json'),empty()) : empty());
 }
 async function saveProgress(value, data) {
   if (PREVIEW) { write(PREVIEW,data); return data; }
   requireStorage(); const name=username(value);
-  if (CLOUD) {
+  if (remote()) {
+    const turso=remote();
+    for (let i=0;i<4;i++) {
+      let current;
+      try { current=await turso.getProgress(name); }
+      catch (e) {
+        if (e.code !== 'BLOB_CORRUPT') throw e;
+        await turso.overwriteProgress(name, data);
+        return data;
+      }
+      const merged=global.KD.mergeProgress(data, current && current.data);
+      try {
+        if (!current) await turso.insertProgress(name, merged);
+        else if (!await turso.updateProgress(name, merged, current.version)) throw Object.assign(new Error('conflict'), {name:'BlobPreconditionFailedError'});
+        return merged;
+      } catch (e) {
+        if (['BlobPreconditionFailedError','BlobAlreadyExistsError'].includes(e.name) && i<3) continue;
+        throw e;
+      }
+    }
+    throw new Error('Could not save cloud data.');
+  }
+  if (BLOB) {
     const key='progress/'+name+'.json';
     for (let i=0;i<4;i++) {
-      const current=await blobRead(key), merged=global.KD.mergeProgress(data,current && current.data);
+      let current;
+      try { current=await blobRead(key); }
+      catch (e) {
+        if (e.code !== 'BLOB_CORRUPT') throw e;
+        await blobWrite(key,data,e.etag,false);
+        return data;
+      }
+      const merged=global.KD.mergeProgress(data,current && current.data);
       try { await blobWrite(key,merged,current && current.etag,!current); return merged; }
-      catch(e) { if (!['BlobPreconditionFailedError','BlobAlreadyExistsError'].includes(e.name) || i===3) throw e; }
+      catch(e) {
+        if (['BlobPreconditionFailedError','BlobAlreadyExistsError'].includes(e.name) && i<3) continue;
+        throw (e && e.name === 'BlobStoreSuspendedError') ? cloudReadError(e) : e;
+      }
     }
   }
   const merged=global.KD.mergeProgress(data,await getProgress(name));

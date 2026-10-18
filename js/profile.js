@@ -35,9 +35,53 @@
       accuracy: samples.length ? samples.filter(function (s) { return s.ok; }).length / samples.length * 100 : 100 };
   };
   KD.mergeProfile = function (a, b) {
-    // Historical predictions are snapshots, not counters that may be added twice.
-    var chosen = !b || (a && (a.at || 0) >= (b.at || 0)) ? a : b;
-    return chosen ? JSON.parse(JSON.stringify(chosen)) : { at: 0, keys: {}, pairs: {}, history: [] };
+    function copy(value) { return JSON.parse(JSON.stringify(value)); }
+    if (!a || !b) return a || b ? copy(a || b) : { at: 0, keys: {}, pairs: {}, history: [] };
+    var chosen = (a.at || 0) > (b.at || 0) ? a : (a.at || 0) < (b.at || 0) ? b :
+      (JSON.stringify(a.history || []) <= JSON.stringify(b.history || []) ? a : b);
+    var out = copy(chosen);
+    function samples(row) { return row && Array.isArray(row.samples) ? row.samples : []; }
+    function latest(row) {
+      return samples(row).reduce(function (at, sample) { return Math.max(at, Number(sample.at) || 0); }, 0);
+    }
+    ['keys', 'pairs'].forEach(function (kind) {
+      var left = a[kind] || {}, right = b[kind] || {};
+      var ids = Object.keys(left).concat(Object.keys(right)).filter(function (id, index, all) { return all.indexOf(id) === index; }).sort();
+      out[kind] = {};
+      ids.forEach(function (id) {
+        var x = left[id], y = right[id];
+        if (!x || !y) { out[kind][id] = copy(x || y); return; }
+        // Duration is a prediction snapshot. Keep the latest per key instead of
+        // replacing every key when another device finishes a different drill.
+        var row = latest(x) > latest(y) ? x : latest(x) < latest(y) ? y :
+          (JSON.stringify(x) <= JSON.stringify(y) ? x : y);
+        var merged = {};
+        [x, y].forEach(function (source) {
+          var occurrences = {};
+          samples(source).forEach(function (sample) {
+            if (!sample || !Number.isFinite(sample.at) || typeof sample.ok !== 'boolean') return;
+            var key = sample.at + ':' + sample.ok + ':' + (sample.i == null ? '' : sample.i);
+            // Legacy samples have no position ID. Preserve their multiplicity
+            // while repeated downloads still contribute only the same evidence.
+            var occurrence = occurrences[key] || 0;
+            occurrences[key] = occurrence + 1;
+            var identity = key + ':' + occurrence;
+            if (!merged[identity]) merged[identity] = copy(sample);
+          });
+        });
+        out[kind][id] = copy(row);
+        out[kind][id].samples = Object.keys(merged).sort(function (p, q) {
+          return merged[p].at - merged[q].at || p.localeCompare(q);
+        }).map(function (key) { return merged[key]; }).slice(-16);
+      });
+    });
+    var pairs = Object.keys(out.pairs);
+    if (pairs.length > 512) pairs.sort(function (x, y) {
+      return latest(out.pairs[y]) - latest(out.pairs[x]) || x.localeCompare(y);
+    }).slice(512).forEach(function (id) { delete out.pairs[id]; });
+    out.at = Math.max(Number(a.at) || 0, Number(b.at) || 0);
+    out.history = (out.history || []).slice(-1000);
+    return out;
   };
   KD.updateProfile = function (profile, state, at) {
     profile = profile || { at: 0, keys: {}, pairs: {}, history: [] };
@@ -52,18 +96,18 @@
       var ms = row.ms + (!row.valid ? (prediction && prediction.ms || fallback) : 0);
       if (ms > 0) { var value = means[row.id] || (means[row.id] = { ms: 0, n: 0 }); value.ms += ms; value.n++; }
     });
-    function note(kind, id, ms, first) {
+    function note(kind, id, ms, first, index) {
       var row = profile[kind][id] || { ms: 0, samples: [] };
-      row.samples = row.samples.slice(-15).concat({ ok: !!first, at: at });
+      row.samples = row.samples.slice(-15).concat({ ok: !!first, at: at, i: index });
       if (ms > 0) row.ms = KD.predictDuration(row.ms, ms, row.samples.filter(function (s) { return s.ok; }).length);
       profile[kind][id] = row;
     }
     var previous = null;
-    rows.forEach(function (row) {
+    rows.forEach(function (row, index) {
       var mean = means[row.id];
-      note('keys', row.id, mean ? mean.ms / mean.n : 0, row.first);
+      note('keys', row.id, mean ? mean.ms / mean.n : 0, row.first, index);
       if (previous && previous.ti === row.ti && previous.id !== 'Space' && row.id !== 'Space')
-        note('pairs', previous.id + '>' + row.id, row.ms, previous.first && row.first);
+        note('pairs', previous.id + '>' + row.id, row.ms, previous.first && row.first, index);
       previous = row;
       var recent = profile.history.slice(-999);
       var caps = [[1000, 50], [500, 29], [250, 18], [125, 13]];

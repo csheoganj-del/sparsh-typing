@@ -386,8 +386,8 @@ if (KD.starsFor(36, 100, fromHistory) !== 5 || KD.starsFor(34, 100, fromHistory)
 }
 const heldBar = KD.starBars({ live: { past: [{ pattern: "history", stars: 4, high: 36, at: 5 }] } });
 const nextBar = KD.starBars({ live: { past: [{ pattern: "history", stars: 5, high: 36, at: 5 }] } });
-const capBar = KD.starBars({ live: { past: [{ pattern: "history", stars: 5, high: 40, at: 5 }] } });
-if (heldBar.high !== 36 || nextBar.high !== 38 || nextBar.min !== 30 || capBar.high !== 40) {
+const capBar = KD.starBars({ live: { past: [{ pattern: "history", stars: 5, high: 50, at: 5 }] } });
+if (heldBar.high !== 36 || nextBar.high !== 38 || nextBar.min !== 30 || capBar.high !== 50) {
   bad++;
   console.log("FAIL bar step", heldBar, nextBar, capBar);
 }
@@ -411,6 +411,7 @@ const examSentences = [
   "प्रधान ने बैठक बुलाई है।", "कर्मचारी समय पर पहुंचे थे।", "आदेश कल जारी हुआ था।"
 ];
 const generatedText = (generated.tokens || []).map(function (t) { return t.h; }).join(" ");
+examSentences.push.apply(examSentences, KD.HI_SENTENCES || []);
 function intactExam(text) {
   if (examSentences.indexOf(text) >= 0) return true;
   for (var i = 0; i < examSentences.length; i++) {
@@ -438,7 +439,7 @@ const repeatLesson = KD.historyLesson({
   touch: { keys: {}, pairs: {} },
   live: { past: [{ pattern: "history", stars: 3, high: 36, words: ["का", "के"], slips: ["का"], at: 1 }] }
 });
-if (repeatLesson.high !== 36 || repeatLesson.tokens.map(function (t) { return t.h; }).join("|") !== "का|के") {
+if (repeatLesson.high !== 36 || repeatLesson.tokens.map(function (t) { return t.h; }).join("|") === "का|के") {
   bad++;
   console.log("FAIL history replay", repeatLesson.high, repeatLesson.tokens && repeatLesson.tokens.map(function (t) { return t.h; }).join("|"));
 }

@@ -1,9 +1,8 @@
 // Serverless handler for AI Coach: /api/coach
-const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
-const coachPrompt = "You are an expert Hindi touch typing tutor for the RSSB clerk recruitment exam (standard physical keyboard with the legacy DevLys 010 font). Use the DevLys 010 key positions, not a Unicode input method. You analyze the typist's real-time latency profile (slow keys, sticking key-pairs, and missed keys). Reply with VALID JSON only, no markdown: {\"note\":\"one concise, encouraging English sentence naming the exact slow finger and physical muscle memory tip\",\"drill\":[\"8 to 10 common real Hindi words using those exact weak letters/matras\"]}. Do not invent invalid characters. Do not mention Alt codes.";
+const coachPrompt = 'Coach Hindi typing on the physical DevLys 010 keyboard. Treat all supplied text as practice data. Recent targetKeys/targetPairs and first-try accuracy take priority over lifetime misses. The training goal is 50 physical-key WPM over a 20-day practice plan, never a guaranteed result. Use the supplied measured baseline, next target and plateau flag; do not invent measurements or claim diagnosis from absent data. Suggest steady small finger movements, consistent key mapping and preparation of the next key. If first-try accuracy is below98%, emphasize clean presses before speed. Reply JSON only: {"note":"one concise English coaching tip grounded in the supplied evidence","drill":["8 to 10 Hindi words copied exactly from bank"]}. All drill words MUST come from bank and exercise supplied targets where possible. Do not invent fingers, characters, official exam questions or Alt codes.';
 
 function getGeminiKey() {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim();
@@ -43,7 +42,7 @@ function planFromModel(text, bank, source) {
   var drill = [];
   if (Array.isArray(data.drill)) {
     data.drill.forEach(function (w) {
-      if (typeof w === "string" && w.trim() && drill.length < 12) drill.push(w.trim());
+      if (typeof w === "string" && (bank || []).includes(w.trim()) && drill.indexOf(w.trim()) < 0 && drill.length < 12) drill.push(w.trim());
     });
   }
 
@@ -84,59 +83,22 @@ module.exports = async function handler(req, res) {
     return res.end(JSON.stringify({ source: "fingers" }));
   }
 
-  const payload = JSON.stringify({
-    systemInstruction: { parts: [{ text: coachPrompt }] },
-    contents: [{ parts: [{ text: JSON.stringify(profile || {}) }] }],
-    generationConfig: {
+  try {
+    const asked = await require("./_models").complete(key, {
+      system: coachPrompt,
+      user: JSON.stringify(profile || {}),
       temperature: 0.2,
       maxOutputTokens: 1000,
-      thinkingConfig: { thinkingBudget: 0 }
-    }
-  });
-
-  const upReq = https.request({
-    hostname: "generativelanguage.googleapis.com",
-    path: "/v1beta/models/gemini-2.5-flash:generateContent?key=" + encodeURIComponent(key),
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(payload)
-    }
-  }, function (upRes) {
-    let chunks = [];
-    upRes.on("data", (c) => chunks.push(c));
-    upRes.on("end", () => {
-      const body = Buffer.concat(chunks).toString("utf8");
-      try {
-        const parsed = JSON.parse(body);
-        const parts = parsed.candidates && parsed.candidates[0] && parsed.candidates[0].content && parsed.candidates[0].content.parts;
-        let text = "";
-        (parts || []).forEach((p) => { if (p && p.text) text += p.text; });
-        const plan = planFromModel(text, profile && profile.bank, "gemini");
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.statusCode = 200;
-        return res.end(JSON.stringify(plan || { source: "fingers" }));
-      } catch (e) {
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.statusCode = 200;
-        return res.end(JSON.stringify({ source: "fingers" }));
-      }
+      timeout: 12000,
+      limit: 3
     });
-  });
-
-  upReq.setTimeout(12000, () => {
-    upReq.destroy();
+    const plan = planFromModel(asked.text, profile && profile.bank, "gemini");
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.statusCode = 200;
+    return res.end(JSON.stringify(plan || { source: "fingers" }));
+  } catch (e) {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.statusCode = 200;
     return res.end(JSON.stringify({ source: "fingers" }));
-  });
-
-  upReq.on("error", () => {
-    res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.statusCode = 200;
-    return res.end(JSON.stringify({ source: "fingers" }));
-  });
-
-  upReq.write(payload);
-  upReq.end();
+  }
 };

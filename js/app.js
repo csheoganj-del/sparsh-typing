@@ -11,6 +11,8 @@
   var playState = null;
   var playTimer = null;
   var heldKeys = {};
+  var sentenceJobs = {};
+  var cloudReadJob = null;
   var skillStamp = Date.now();
 
   function icon(name) {
@@ -37,7 +39,7 @@
   var authToken = localStorage.getItem("sparsh_auth_token") || null;
   if (authToken) STORE = GUEST_STORE + "-account-" + currentUser;
   var cloudSyncText = authToken ? "Connecting to cloud…" : "Saved on this device";
-  var pendingCloud = null, saveTimer = null, lastCloudSave = 0;
+  var pendingCloud = null, saveTimer = null, lastCloudSave = 0, cloudFailedAt = 0, cloudPausedUntil = 0, cloudBusy = false;
   var showAuthModal = false;
   var authTab = "login";
   function loadLocal() {
@@ -48,9 +50,23 @@
     return { stars: {}, placed: {}, misses: {}, settings: { sound: true, hints: true }, bestHi: null, bestEn: null };
   }
   var store = KD.mergeProgress(loadLocal(), null);
+  function ensureTraining() {
+    if (!store.training && KD.trainingProgram) {
+      var program = KD.trainingProgram(store);
+      store.training = { startDate: program.startDate, goalWpm: 50, durationDays: 20, baselineWpm: 33, baselineEstimated: true };
+    }
+    if (store.training && store.training.baselineEstimated && store.practice40) {
+      var first = (store.practice40.attempts || []).find(function (r) { return r.full && !r.guided && r.ms >= 120000 && r.wpm > 0; });
+      if (first) { store.training.baselineWpm = first.wpm; store.training.baselineEstimated = false; }
+    }
+  }
+  ensureTraining();
   function captureResume() {
     if (!session || !session.live || !session.lesson || !store.live) return;
     if (session.phase === "done") return;
+    if (!store.live.lesson || store.live.lesson.id !== session.lesson.id) return;
+    if (KD.livePassageSignature(store.live.lesson) !== KD.livePassageSignature(session.lesson)) return;
+    if (KD.liveLessonCompleted(session.lesson, store.live.past)) return;
     var step = session.steps && session.steps[session.i];
     var at = "";
     if (session.kind === "lock") at = (session.words[session.wi] && session.words[session.wi].h) || "";
@@ -58,6 +74,7 @@
     var elapsedMs = session.t0 ? Math.max(0, Math.round(elapsed())) : 0;
     store.live.resume = {
       id: session.lesson.id,
+      passageSig: KD.livePassageSignature(session.lesson),
       phase: session.phase === "run" ? "run" : "intro",
       i: session.i || 0,
       wi: session.wi || 0,
@@ -74,6 +91,8 @@
       wrong: (session.wrong || []).slice(0, 24),
       typedWords: session.typedWords || []
     };
+    store.live.updatedAt = Math.max(Date.now(), (store.live.updatedAt || 0) + 1);
+    store.live.resume.savedAt = store.live.updatedAt;
   }
   function syncStatus(text) {
     cloudSyncText = text;
@@ -81,43 +100,109 @@
     if (label && label.textContent !== text) label.textContent = text;
   }
   function cloudStatusHTML() { return '<span id="cloud-status" class="cloud-status" role="status">' + esc(cloudSyncText) + '</span>'; }
+  function noteCloudPause(error) {
+    if (!error || error.code !== 'storage_paused') return false;
+    cloudPausedUntil = Date.now() + KD.CLOUD_PAUSE_MS;
+    syncStatus('Saved on this device · cloud storage paused');
+    return true;
+  }
+  function queueCloud(immediate) {
+    if (!pendingCloud || !authToken || cloudBusy) return saveQueue;
+    var delay = KD.cloudDelay(Date.now(), lastCloudSave, cloudFailedAt, immediate === true, cloudPausedUntil);
+    if (delay > 0) {
+      if (!saveTimer) saveTimer = setTimeout(function () { saveTimer = null; flushCloud(); }, delay);
+      return saveQueue;
+    }
+    return flushCloud();
+  }
   function flushCloud() {
     clearTimeout(saveTimer); saveTimer = null;
-    if (!pendingCloud || !folderSave) return saveQueue;
+    if (cloudPausedUntil && Date.now() < cloudPausedUntil) {
+      syncStatus('Saved on this device · cloud storage paused');
+      return saveQueue;
+    }
+    if (!pendingCloud || !folderSave || !authToken || cloudBusy) return saveQueue;
+    if (typingActive()) {
+      // The reply is merged into the whole store; never do that mid-lesson.
+      saveTimer = setTimeout(function () { saveTimer = null; flushCloud(); }, 5000);
+      return saveQueue;
+    }
+    cloudBusy = true;
     var snapshot = pendingCloud; pendingCloud = null;
+    var failedAuth = false;
     syncStatus('Saving to cloud…');
     saveQueue = saveQueue.then(function () {
-      var headers = { 'Content-Type':'application/json' };
-      if (snapshot.token) headers.Authorization = 'Bearer ' + snapshot.token;
+      var headers = { 'Content-Type':'application/json', Authorization:'Bearer ' + snapshot.token };
       return fetch('/api/progress', {method:'POST',headers:headers,body:snapshot.body}).then(function (r) {
-        if (!r.ok) throw new Error(r.status === 401 ? 'Sign in again to sync' : 'Cloud save pending · retrying');
-        return r.json();
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (!r.ok) {
+            failedAuth = r.status === 401;
+            var err = new Error(data && data.code === 'storage_paused' ? 'Saved on this device · cloud storage paused' : (failedAuth ? 'Sign in again to sync' : 'Cloud save pending · retrying'));
+            err.code = data && data.code || '';
+            throw err;
+          }
+          return data;
+        });
       }).then(function (data) {
+        cloudFailedAt = 0;
+        cloudPausedUntil = 0;
         lastCloudSave = Date.now();
-        if (authToken === snapshot.token && data.progress) {
+        if (authToken === snapshot.token && data.progress && !typingActive()) {
           store = KD.mergeProgress(store, data.progress);
-          localStorage.setItem(STORE, JSON.stringify(store));
+          try { localStorage.setItem(STORE, JSON.stringify(store)); } catch (e) {}
         }
         if (authToken === snapshot.token) syncStatus(pendingCloud ? 'Saved on this device · cloud save pending' : data.cloud ? 'Saved to cloud' : 'Saved in this folder');
       }).catch(function (error) {
+        cloudFailedAt = Date.now();
         if (authToken === snapshot.token) {
           if (!pendingCloud) pendingCloud = snapshot;
-          syncStatus(error.message);
-          saveTimer = setTimeout(flushCloud,60000);
+          if (!noteCloudPause(error)) syncStatus(error.message || 'Cloud save pending · retrying');
         }
+      }).then(function () {
+        cloudBusy = false;
+        if (pendingCloud && authToken && !failedAuth) queueCloud(pendingCloud.immediate);
       });
     });
     return saveQueue;
   }
+  var saveSoonTimer = null;
+  var saveSoonSince = 0;
+  var lastKeyAt = 0;
+  /* True while the learner is actively typing a lesson. */
+  function typingActive() {
+    return !!(session && screen === "run" && session.phase === "run" && !session.paused);
+  }
+  /* save() stringifies the whole progress store into localStorage (and queues a
+     cloud write). Doing that in the middle of a burst froze the page for a few
+     frames, so the next keys appeared late. Wait for a short pause in typing
+     (at most 30 s), then write when the browser is idle. */
+  function saveSoon() {
+    if (saveSoonTimer) return;
+    if (!saveSoonSince) saveSoonSince = performance.now();
+    saveSoonTimer = setTimeout(function () {
+      saveSoonTimer = null;
+      if (!(session && screen === "run" && session.phase !== "done")) { saveSoonSince = 0; return; }
+      if (typingActive() && performance.now() - lastKeyAt < 1500 && performance.now() - saveSoonSince < 30000) { saveSoon(); return; }
+      var run = function () {
+        saveSoonSince = 0;
+        if (session && screen === "run" && session.phase !== "done") save();
+      };
+      if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 1000 });
+      else run();
+    }, 700);
+  }
   function save(immediate) {
+    if (saveSoonTimer) { clearTimeout(saveSoonTimer); saveSoonTimer = null; }
+    saveSoonSince = 0;
+    ensureTraining();
     captureResume();
     var body = JSON.stringify(store);
     try { localStorage.setItem(STORE, body); } catch (e) {}
     if (!folderSave) { syncStatus(authToken ? 'Saved on this device · cloud unavailable' : 'Saved on this device · sign in to sync'); return; }
-    pendingCloud = {body:body,token:authToken};
-    if (!authToken || immediate === true || Date.now()-lastCloudSave >= 60000) return flushCloud();
-    syncStatus('Saved on this device · cloud save pending');
-    if (!saveTimer) saveTimer = setTimeout(function () { saveTimer = null; flushCloud(); },Math.max(1000,60000-(Date.now()-lastCloudSave)));
+    if (!authToken) { syncStatus('Saved on this device · sign in to sync'); return; }
+    pendingCloud = {body:body,token:authToken,immediate:immediate === true || !!(pendingCloud && pendingCloud.immediate)};
+    syncStatus(cloudPausedUntil && Date.now() < cloudPausedUntil ? 'Saved on this device · cloud storage paused' : 'Saved on this device · cloud save pending');
+    return queueCloud(immediate);
   }
   function progressWork(s) {
     if (!s) return false;
@@ -241,6 +326,7 @@
     return -1;
   }
   function fingerNote() {
+    if (KD.adaptivePlan) return KD.adaptivePlan(store).note;
     var board = KD.coachBoard(store.touch);
     var bits = [];
     if (board.slowKeys && board.slowKeys[0]) bits.push((faceOfId(board.slowKeys[0].id) || "key") + " is slow");
@@ -268,6 +354,10 @@
     return t;
   }
   function localRepeat() {
+    if (KD.adaptiveRecovery) {
+      var recovery = KD.adaptiveRecovery(store);
+      if (recovery) return recovery.tokens.map(function (t) { return t.h; }).filter(function (h, i, all) { return all.indexOf(h) === i; }).slice(0, 8);
+    }
     var ni = nextLessonIndex();
     if (ni < 0) return [];
     var src = KD.LESSONS[ni];
@@ -285,6 +375,7 @@
   }
   function fingerProfile() {
     var board = KD.coachBoard(store.touch);
+    var training = KD.adaptivePlan(store);
     function rows(list) {
       return (list || []).slice(0, 5).map(function (r) {
         return { face: faceOfId(r.id) || "", ms: Math.round(r.avg || 0), n: r.n || 0 };
@@ -307,8 +398,13 @@
     var ni = nextLessonIndex();
     var lesson = ni >= 0 ? KD.LESSONS[ni] : null;
     var bank = [];
-    if (lesson) (lesson.bank || lesson.tokens || []).forEach(function (t) { if (t && t.h) bank.push(t.h); });
+    var recovery = KD.adaptiveRecovery(store);
+    if (recovery) recovery.tokens.forEach(function (t) { if (t && t.h && bank.indexOf(t.h) < 0) bank.push(t.h); });
+    if (lesson && !KD.courseComplete(store)) (lesson.bank || lesson.tokens || []).forEach(function (t) { if (t && t.h && bank.indexOf(t.h) < 0) bank.push(t.h); });
     return {
+      training: { goalWpm: 50, baselineWpm: training.baselineWpm, targetWpm: training.targetWpm, firstTryAccuracy: training.firstTryAccuracy, plateau: training.plateau, baselineSource: training.baselineSource },
+      targetKeys: training.targetKeys,
+      targetPairs: training.targetPairs,
       paceMs: Math.round(board.pace || 0),
       slowKeys: rows(board.slowKeys),
       slowPairs: rows(board.slowPairs),
@@ -320,13 +416,15 @@
   }
   function askCoach() {
     var local = { at: Date.now(), note: fingerNote(), repeat: localRepeat(), source: "fingers" };
-    store.coach = store.coach || local;
+    store.coach = Object.assign({}, store.coach || {}, local);
+    var coachToken = authToken, coachUser = currentUser;
     var profile = fingerProfile();
     fetch("/api/coach", {
       method: "POST",
       headers: Object.assign({ "Content-Type": "application/json" }, authToken ? {Authorization:"Bearer " + authToken} : {}),
       body: JSON.stringify(profile)
     }).then(function (r) { return r.json(); }).then(function (plan) {
+      if (coachToken !== authToken || coachUser !== currentUser) return;
       if (!plan || !plan.note) return;
       var allow = {};
       (profile.bank || []).forEach(function (w) { allow[w] = 1; });
@@ -335,7 +433,7 @@
       store.coach = {
         at: Date.now(),
         note: String(plan.note).slice(0, 320),
-        drill: (plan.drill && plan.drill.length) ? plan.drill : (store.coach && store.coach.drill),
+        drill: Array.isArray(plan.drill) ? plan.drill.filter(function (w) { return typeof w === 'string' && w.length <= 40 && KD.safeToken(w); }).slice(0, 12) : [],
         repeat: repeat.length ? repeat.slice(0, 8) : local.repeat,
         source: plan.source === "gemini" ? "gemini" : "fingers"
       };
@@ -390,6 +488,10 @@
         errOsc.stop(t + dur2);
       }
     } catch (e) {}
+  }
+  function beepLater(ok) {
+    if (!store.settings.sound) return;
+    setTimeout(function () { beep(ok); }, 0);
   }
 
   function soundFanfare(stars) {
@@ -519,19 +621,31 @@
     if (!Array.isArray(store.live.past)) store.live.past = [];
     var lesson = store.live.lesson;
     var resume = liveResume();
+    var completed = KD.liveLessonCompleted(lesson, store.live.past);
+    if (completed) { store.live.resume = null; resume = null; }
+    if (resume && lesson && lesson.tokens && (lesson.wordlock
+        ? (resume.wi || 0) >= lesson.tokens.length
+        : (resume.i || 0) >= KD.buildSteps(lesson.tokens).length)) {
+      store.live.resume = null;
+      resume = null;
+    }
     var history = KD.courseComplete && KD.courseComplete(store);
-    if (history && lesson && lesson.pattern === "history" && lesson.tokens && lesson.tokens.length && resumeMid(resume)) return;
-    if (!history && lesson && lesson.tokens && lesson.tokens.length && resumeMid(resume)) return;
+    if (history && lesson && lesson.pattern === "history" && lesson.tokens && lesson.tokens.length &&
+        !completed) return;
+    if (!history && !completed && lesson && lesson.tokens && lesson.tokens.length && resumeMid(resume)) return;
     var next = KD.composeLive(store);
-    if (lessonSig(lesson) === lessonSig(next) && lesson && next && lesson.min === next.min && lesson.mid === next.mid && lesson.high === next.high) return;
+    if (!completed && lessonSig(lesson) === lessonSig(next) && lesson && next && lesson.min === next.min && lesson.mid === next.mid && lesson.high === next.high) return;
     store.live.resume = null;
     store.live.lesson = next;
+    store.live.updatedAt = Math.max(Date.now(), (store.live.updatedAt || 0) + 1);
     if (!booting) save();
   }
   function liveResume() {
     var src = store.live && store.live.lesson;
     var resume = store.live && store.live.resume;
     if (!src || !resume || resume.id !== src.id) return null;
+    if (resume.passageSig && resume.passageSig !== KD.livePassageSignature(src)) return null;
+    if (KD.liveLessonCompleted(src, store.live.past)) return null;
     return resume;
   }
   function resumeMid(resume) {
@@ -598,7 +712,7 @@
 
   function historyOffer() {
     if (!KD.courseComplete || !KD.courseComplete(store) || !KD.starBars) return null;
-    return { bars: KD.starBars(store, { min: 14, mid: 22, high: 32, cap: 40 }), names: KD.weakKeyNames ? KD.weakKeyNames(store) : [] };
+    return { bars: KD.starBars(store, { min: 14, mid: 22, high: 32, cap: 50 }), names: KD.weakKeyNames ? KD.weakKeyNames(store) : [] };
   }
 
   function homeHTML() {
@@ -615,17 +729,23 @@
 
   function practice40HTML() {
     var state = KD.practice40State(store), last = state.last;
-    var today = new Date().toLocaleDateString('en-IN');
-    var todayChecks = state.attempts.filter(function (r) { return new Date(r.at).toLocaleDateString('en-IN') === today; }).length;
+    var program = KD.trainingProgram(store), plan = KD.adaptivePlan(store);
     var offer = historyOffer();
     var learn = offer
-      ? 'The next lesson is an exam sentence formed with ' + (offer.names.length ? offer.names.join(', ') : 'the keys you miss') + '. Pass at ' + offer.bars.min + ' WPM. Five stars at ' + offer.bars.high + ' WPM. A five-star run raises that bar by 2, up to 40.'
+      ? 'Use new Hindi sentences to carry your combinations into normal reading. Your next practice pace is ' + program.nextTargetWpm + ' WPM with 98% first-try accuracy.'
       : 'Continue the course. Learn one key, then combinations and words.';
-    return '<section class="practice40" aria-label="Hindi practice to 40 WPM"><div class="practice40-head"><div><span class="kicker">Your practice goal</span><h2>Hindi · 40 WPM</h2><p>' + esc(state.reached ? '40 WPM repeated on three fresh passages with at least 98% first-try accuracy.' : state.stage) + '</p></div><div class="practice40-speed"><b>' + (last ? fmt(last.wpm) : '—') + '</b><span>latest two-minute WPM</span></div></div>' +
-      '<div class="practice40-routine"><div><b>1. Learn · 15–20 min</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'Start next lesson' : 'Continue learning') + '</button></div>' +
-      '<div><b>2. Repair · 10 min</b><p>Repeat difficult pairs slowly. Keep accuracy before increasing speed.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button></div>' +
+    var lessonRun = KD.latestLessonRun(store);
+    var showLesson = lessonRun && (!last || lessonRun.at >= last.at);
+    var shownWpm = showLesson ? lessonRun.wpm : (last ? last.wpm : null);
+    var shownLabel = showLesson ? 'latest lesson WPM' : 'latest two-minute WPM';
+    return '<section class="practice40" aria-label="Hindi practice to 50 WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · 50 WPM</h2><p>' + esc(state.reached ? '50 WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span></div></div>' +
+      '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Goal date: ' + esc(program.endDate) + '</p>' +
+      '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
+      '<div><b>2. Practise your combinations</b><p>Recent errors and slow transitions choose the drill. Words rotate as your accuracy improves.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
       '<div><b>3. Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div></div>' +
-      '<p class="small muted">' + todayChecks + ' speed checks today · ' + (last ? Math.round(last.realAcc) + '% first-try accuracy in your last check · ' : '') + 'Goal: three fresh passage checks at 40 WPM and 98% accuracy. Short key drills do not count as passage speed.</p>' +
+      '<p class="small muted">' + program.today.fullChecks + ' full passage checks today · ' + program.today.recordedMinutes + ' recorded practice minutes. Goal: three fresh passage checks at 50 WPM and 98% accuracy. Lesson runs and short bursts do not replace that two-minute check.</p>' +
+      '<details class="training-plan" open><summary>Your daily routine · about ' + program.totalMinutes + ' minutes including breaks</summary><div class="training-blocks">' + program.blocks.map(function (block) { return '<div><b>' + esc(block.title) + ' · ' + block.minutes + ' min</b><p>' + esc(block.detail) + '</p></div>'; }).join('') + '</div><p class="small muted">Take a two-minute break between blocks. You can split the blocks between morning and evening. Keep the same DevLys keyboard mapping when you switch devices.</p></details>' +
+      '<details class="training-plan"><summary>Your 20-day checkpoints</summary><p class="small muted">' + esc(program.note) + '</p><div class="training-checkpoints">' + program.milestones.map(function (m) { return '<span>Day ' + m.day + '<b>' + m.targetWpm + ' WPM</b><small>' + esc(m.date) + '</small></span>'; }).join('') + '</div><p class="small muted">Stable finger-to-key mapping, preparing the next keystroke, and small hand movements guide the technique practice. <a href="https://userinterfaces.aalto.fi/how-we-type/" target="_blank" rel="noopener">Typing research</a>. The exact daily routine is a practice plan, not a proven deadline for reaching 50 WPM.</p></details>' +
       (state.attempts.length ? '<details><summary>Recent speed checks</summary><table class="practice40-history"><thead><tr><th>Date</th><th>Practice</th><th>WPM</th><th>First try</th></tr></thead><tbody>' + state.attempts.slice(-7).reverse().map(function (r) { return '<tr><td>' + esc(new Date(r.at).toLocaleDateString('en-IN')) + '</td><td>' + (r.full ? 'Passage' : 'Familiar keys') + (r.guided ? ' · guided' : '') + '</td><td>' + fmt(r.wpm) + '</td><td>' + Math.round(r.realAcc) + '%</td></tr>'; }).join('') + '</tbody></table></details>' : '') + '</section>';
   }
   function startPractice40() {
@@ -636,18 +756,18 @@
     session.lesson.id = 'practice40'; session.lesson.title = practice.title;
     session.lesson.teach = practice.teach; session.lesson.stage = 'practice';
     session.lesson.scoreFree = false; session.lesson.acc = 98;
-    session.lesson.min = 0; session.lesson.mid = 30; session.lesson.high = 40;
+    session.lesson.min = 0; session.lesson.mid = 40; session.lesson.high = 50;
     session.lesson.oppositeShift = false; session.lesson.hand = ''; session.hand = ''; session.anchor = null;
-    session.limit = 120000; session.practice40 = { full: practice.full, guided: false };
+    session.limit = 120000; session.practice40 = { full: practice.full, guided: false, sentenceIds: practice.sentenceIds || [], source: practice.source };
     session.hints = practice.full ? 'none' : 'hindi';
     paintShell();
   }
   function practice40Result(r) {
     var timed = r.ms >= 120000;
-    var goal = timed && session.practice40.full && !session.practice40.guided && r.wpm >= 40 && r.realAcc >= 98 && r.acc >= 98;
+    var goal = timed && session.practice40.full && !session.practice40.guided && r.wpm >= 50 && r.realAcc >= 98 && r.acc >= 98;
     var state = KD.practice40State(store);
-    return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi · 40 WPM practice</div><h1>' + (goal ? '40 WPM with clean typing' : r.realAcc < 98 ? 'Build accuracy first' : 'Keep building your rhythm') + '</h1>' +
-      '<div class="dials">' + dialHTML('Correct key WPM', fmt(r.wpm), Math.min(100, r.wpm / 40 * 100), false) + dialHTML('First-try accuracy', Math.round(r.realAcc) + '%', r.realAcc, false) + dialHTML('Time', dur(r.ms), 0, true) + '</div>' +
+    return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi · 50 WPM practice</div><h1>' + (goal ? '50 WPM with clean typing' : r.realAcc < 98 ? 'Build accuracy first' : 'Keep building your rhythm') + '</h1>' +
+      '<div class="dials">' + dialHTML('Correct key WPM', fmt(r.wpm), Math.min(100, r.wpm / 50 * 100), false) + dialHTML('First-try accuracy', Math.round(r.realAcc) + '%', r.realAcc, false) + dialHTML('Time', dur(r.ms), 0, true) + '</div>' +
       '<p>' + (session.practice40.full ? 'Fresh Hindi passage' : 'Familiar-key practice; full Hindi passage speed is not measured yet') + (session.practice40.guided ? ' · guidance used.' : '.') + '</p><p>' + (!timed ? 'Finish a full two-minute check to save a speed result.' : state.reached ? 'You have repeated the goal on three fresh passages. Keep practising new text.' : 'Repeat the goal on three fresh passages with at least 98% first-try accuracy. Correcting mistakes helps final accuracy, but does not erase first-try mistakes.') + '</p>' +
       '<div class="row-btns"><button class="btn primary" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="practice40-check">New speed check</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
   }
@@ -767,13 +887,13 @@
       return '<div class="krow">' + html + '</div>';
     }).join('');
     rows += '<div class="krow">' + modifier('control', true) + modifier('alt', true) +
-      '<div class="key space' + (next && next.code === 'Space' ? ' next' : '') + '"><div class="hi space-label">space</div></div>' + modifier('alt', true) + modifier('control', true) + '</div>';
+      '<div class="key space' + (next && next.code === 'Space' ? ' next' : '') + '" data-code="Space"><div class="hi space-label">space</div></div>' + modifier('alt', true) + modifier('control', true) + '</div>';
     return '<div class="board" aria-label="Standard English US keyboard with DevLys 010 output">' + rows + '</div><p class="keyboard-legend">Top labels: symbols printed on your keyboard. Centre: DevLys 010 output. Shift + 2 (@) types /.</p>';
   }
   function shiftHTML(code, label, on) {
     var quiet = session && session.hand ? " quiet" : "";
     var finger = code === "ShiftLeft" ? "lp" : "rp";
-    return '<div class="key wide' + (on ? " next" : "") + quiet + '" data-finger="' + finger + '"><div class="en">' + code.replace("Shift", "") + '</div><div class="hi" style="font-size:11px;font-family:var(--sans)">' + label + "</div></div>";
+    return '<div class="key wide' + (on ? " next" : "") + quiet + '" data-code="' + code + '" data-finger="' + finger + '"><div class="en">' + code.replace("Shift", "") + '</div><div class="hi" style="font-size:11px;font-family:var(--sans)">' + label + "</div></div>";
   }
   function keyHTML(k, next) {
     var on = next && next.type !== "alt" && next.code === k.code;
@@ -787,7 +907,7 @@
     var cls = "key" + (k.home ? " home" : "") + (on ? " next" : "") + (quiet ? " quiet" : "");
     var hue = KD.FINGERS[k.finger] ? KD.FINGERS[k.finger].hue : "#3b82f6";
     var style = on ? ' style="border-color:' + hue + ';outline:3px solid ' + hue + ';box-shadow:0 0 16px ' + hue + ';"' : "";
-    return '<div class="' + cls + '" data-finger="' + esc(k.finger) + '"' + style + '><div class="en">' + esc(k.legend) + "</div>" +
+    return '<div class="' + cls + '" data-code="' + k.code + '" data-finger="' + esc(k.finger) + '"' + style + '><div class="en">' + esc(k.legend) + "</div>" +
       (printedShift ? '<span class="printed-shift' + (showShift ? ' active' : '') + '" aria-label="Printed Shift symbol ' + esc(printedShift) + '">' + esc(printedShift) + '</span>' : '') +
       '<div class="hi devlys" aria-label="' + esc(KD.keyFace(bigRaw)) + '">' + esc(big) + "</div>" +
       (k.bump && !showShift ? '<div class="bump-dot" style="margin-top:-6px"></div>' : "") +
@@ -991,8 +1111,77 @@
     screen = "run";
     paintShell();
   }
-  function startLive(mode) {
+  function aiDetail(error) {
+    var reason = error && error.reason || '';
+    if (/HTTP 429|HTTP 503/.test(reason)) return 'AI is busy right now. Retry in a minute.';
+    if (/HTTP 404|HTTP 403/.test(reason)) return 'The AI model is unavailable.';
+    if (/validation failed/.test(reason)) return 'The AI text did not pass the typing check.';
+    if (/not configured/.test(reason)) return 'AI is not configured on the server.';
+    return '';
+  }
+  function requestAISentence(lesson) {
+    if (!lesson || lesson.pattern !== 'history' || lesson.aiGenerated || liveResume()) return Promise.resolve(false);
+    if (sentenceJobs[lesson.id]) return sentenceJobs[lesson.id];
+    if (!authToken) { lesson.aiState = 'unavailable'; lesson.source = 'practice-fallback'; return Promise.resolve(false); }
+    var token = authToken, id = lesson.id;
+    var passageSig = KD.livePassageSignature ? KD.livePassageSignature(lesson) : '';
+    var board = KD.coachBoard(store.touch || {});
+    var plan = KD.adaptivePlan ? KD.adaptivePlan(store) : null;
+    var keys = Object.keys(store.misses || {}).filter(function (key) { return key !== 'Space' && KD.drillable(key); }).sort(function (a,b) { return store.misses[b]-store.misses[a]; }).slice(0,4);
+    if (plan) keys = plan.targetKeys.slice(0, 6);
+    if (!plan) (board.slowKeys || []).forEach(function (row) { if (keys.indexOf(row.id)<0 && keys.length<6) keys.push(row.id); });
+    var usage = Object.assign({}, store.practice40 && store.practice40.sentenceUsage || {}, store.live.sentenceUsage || {});
+    var recent = Object.keys(usage).sort(function(a,b){return usage[a].at-usage[b].at;}).slice(-96);
+    lesson.aiState = 'generating';
+    var payload = JSON.stringify({weakKeys:keys,slowPairs:plan ? plan.targetPairs.slice(0,4) : (board.slowPairs||[]).slice(0,4).map(function(r){return r.id;}),recent:recent,training:plan ? {goalWpm:50,baselineWpm:plan.baselineWpm,targetWpm:plan.targetWpm,firstTryAccuracy:plan.firstTryAccuracy,plateau:plan.plateau} : null});
+    function postSentences() {
+      return fetch('/api/sentences',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:payload})
+        .then(function(r){return r.json().catch(function(){return {};}).then(function(data){if(!r.ok){var err=Error('AI unavailable');err.reason=data&&data.reason||'';throw err;}return data;});});
+    }
+    sentenceJobs[id] = postSentences().catch(function(error){
+      if (error && /validation failed|not configured/.test(error.reason || '')) throw error;
+      return postSentences();
+    })
+      .then(function(data){
+        if (token !== authToken || !store.live || !store.live.lesson || store.live.lesson.id !== id) return false;
+        if (KD.livePassageSignature && KD.livePassageSignature(store.live.lesson) !== passageSig) return false;
+        if (session && session.live && session.phase !== 'done' && session.lesson.id === id) return false;
+        if (!data.aiGenerated || !Array.isArray(data.tokens) || !data.tokens.length || !data.tokens.every(function(t){var safe=KD.safeToken(t.h);return safe&&safe.k===t.k;})) throw Error('Invalid AI text');
+        store.live.lesson = Object.assign({},lesson,{tokens:data.tokens,sentenceIds:data.sentenceIds,aiGenerated:true,source:'gemini',aiState:'ready',title:'AI sentence practice · '+lesson.high+' WPM',teach:'AI-generated Hindi practice based on your recent weak keys. These are practice sentences, not official exam questions. Pass at '+lesson.min+' WPM. Practice goal: '+lesson.high+' WPM with 98% first-try accuracy; stars also account for accuracy. Your passage stays fixed on reload.'});
+        store.live.updatedAt = Math.max(Date.now(),(store.live.updatedAt||0)+1); save(true);
+        if(screen==='result')draw();
+        return true;
+      }).catch(function(error){
+        if (token===authToken && store.live && store.live.lesson && store.live.lesson.id===id) {
+          store.live.lesson.aiState='unavailable';store.live.lesson.source='practice-fallback';store.live.lesson.aiDetail=aiDetail(error);
+          store.live.updatedAt=Math.max(Date.now(),(store.live.updatedAt||0)+1);save(true);
+          if(screen==='result')draw();
+        }
+        return false;
+      });
+    return sentenceJobs[id];
+  }
+  function startLive(mode, refreshed) {
+    if(mode==='repeat' || mode==='restart') {openLive(mode);return;}
+    if (!refreshed && authToken && folderSave && screen !== 'run') {
+      return refreshCloud().then(function () { return startLive(mode, true); });
+    }
+    if(mode==='new') {
+      if(!store.live)store.live={past:[]};
+      store.live.lesson=KD.composeLive(store);store.live.resume=null;
+      store.live.updatedAt=Math.max(Date.now(),(store.live.updatedAt||0)+1);save(true);
+    }
     ensureLive();
+    if(liveResume() || store.live.lesson.pattern!=='history' || store.live.lesson.aiGenerated) {openLive(mode);return;}
+    var id=store.live.lesson.id;
+    document.querySelectorAll('[data-act="start-current"], [data-act="live"], [data-act="continue"], [data-act="new-ai-sentence"]').forEach(function(b){b.disabled=true;b.textContent='Generating AI sentences…';});
+    requestAISentence(store.live.lesson).then(function(){if(store.live&&store.live.lesson.id===id)openLive(mode);});
+  }
+  function openLive(mode) {
+    if (mode === 'repeat' && session && session.live) {
+      store.live.lesson = Object.assign({}, session.lesson, { tokens: session.tokens.map(function (t) { return Object.assign({}, t); }) });
+      store.live.resume = null;
+    } else ensureLive();
     var src = store.live.lesson;
     var labels = KD.liveLabels(store);
     if (mode === "restart") store.live.resume = null;
@@ -1013,6 +1202,9 @@
       wordlock: !!src.wordlock,
       stage: "live",
       pattern: src.pattern,
+      sentenceIds: src.sentenceIds || [],
+      aiGenerated: !!src.aiGenerated,
+      source: src.source,
       tokens: tokens
     };
     var steps = KD.buildSteps(tokens);
@@ -1076,7 +1268,7 @@
     };
     screen = "run";
     paintShell();
-    if (mode === "restart") save();
+    save();
   }
 
   function startLock(opts) {
@@ -1240,6 +1432,8 @@
   }
 
   function paint() {
+    if (typingFrame) { cancelAnimationFrame(typingFrame); typingFrame = 0; }
+    if (session) session._guide = "";
     var run = document.getElementById("run");
     if (!run || !session) return;
     var oldStage = run.querySelector(".stage");
@@ -1310,22 +1504,318 @@
     bindPad();
     var stage = run.querySelector(".stage");
     if (stage) stage.scrollTop = stageScroll;
+    revealCurrent();
+    placeCaret();
+  }
+
+  /* A key must change the letter before the keyboard, hands, meters, or save run.
+     Rebuilding #run here made fast typing land on the key that was still lit. */
+  function canTypePatch() {
+    if (!session || session.paused || session.phase !== "run") return false;
+    if (session.hand || session.caps || session.layoutWarn || session.techniqueWarn || session.altDown) return false;
+    return !!document.getElementById("run");
+  }
+  function guideStep() {
+    var quiet = !!(session.practice40 && session.practice40.full) || (session.hints === "none" && (session.exam || (session.lesson && session.lesson.stage === "para")));
+    if (quiet) return null;
+    return session.kind === "exact" ? currentStep() : nextLockStep();
+  }
+  function guideStamp(next) {
+    if (!next) return "";
+    var at = session.kind === "exact" ? session.i : (session.wi + ":" + (session.typed || "").length);
+    return (next.type || "") + ":" + (next.code || "") + ":" + (next.shift ? 1 : 0) + ":" + (next.finger || "") + ":" + (next.num || "") + ":" + at;
+  }
+  function exactNow() {
+    var stepAt = session.steps[session.i] || null;
+    var flash = !!(session.flash && performance.now() - session.flash < 220);
+    var index = stepAt && stepAt.ti >= 0 ? stepAt.ti : -1;
+    if (stepAt && stepAt.space) {
+      for (var b = session.i - 1; b >= 0; b--) {
+        if (session.steps[b] && session.steps[b].ti >= 0) { index = session.steps[b].ti; break; }
+      }
+    }
+    return { index: index, stepAt: stepAt, flash: flash };
+  }
+  function applyNowBox(box, frame) {
+    var tok = session.tokens[frame.index];
+    if (!tok) return;
+    var typedLegacy = krutiSoFar(frame.index);
+    var formed = "";
+    var wait = false;
+    if (typedLegacy) {
+      var live = KD.liveForm(typedLegacy);
+      var text = live.text || "";
+      if (text && (tok.h || "").indexOf(text) === 0) { formed = text; wait = !!live.wait; }
+    }
+    var cur = frame.stepAt && frame.stepAt.ti === frame.index;
+    var missFlash = frame.flash || !!(cur && session.badTokens && session.badTokens[frame.index]);
+    var isLegacy = tok.k != null && session.lang !== "en";
+    var shown = isLegacy ? tok.k : (tok.h || "·");
+    var soFar = isLegacy ? (typedLegacy || "") : (formed || "");
+    var at = soFar && String(shown).indexOf(soFar) === 0 ? soFar.length : 0;
+    var cls = "box now" + (missFlash ? " miss" : "") + (isLegacy ? " devlys" : "");
+    if (at > 0 && at === String(shown || "").length) cls += " typed";
+    if (box.className !== cls) box.className = cls;
+    var caret = box.querySelector(".caret");
+    if (caret && caret.getAttribute("data-at") !== String(at)) caret.setAttribute("data-at", String(at));
+    var waitEl = box.querySelector(".wait");
+    if (wait && !waitEl) box.insertAdjacentHTML("afterbegin", '<span class="wait">मात्रा</span>');
+    else if (!wait && waitEl) waitEl.remove();
+  }
+  function patchExact() {
+    var stage = document.querySelector("#run .stage");
+    if (!stage) return false;
+    var frame = exactNow();
+    if (frame.index < 0) return false;
+    var current = stage.querySelector(".box.now");
+    if (current && current.getAttribute("data-i") === String(frame.index) && current.querySelector(".caret")) {
+      applyNowBox(current, frame);
+      return true;
+    }
+    if (!stage.querySelector(".line")) return false;
+    var top = stage.scrollTop;
+    stage.innerHTML = exactHTML();
+    stage.scrollTop = top;
+    return true;
+  }
+  function applyLockBox(box) {
+    var w = session.words[session.wi];
+    if (!w) return;
+    var flash = !!(session.flash && performance.now() - session.flash < 220);
+    var formed = "";
+    var wait = false;
+    if (session.typed) {
+      if (session.lang === "en") formed = session.typed;
+      else {
+        var live = KD.liveForm(session.typed);
+        var text = live.text || "";
+        var onPath = (w.k || "").indexOf(session.typed) === 0;
+        if (text && w.h.indexOf(text) === 0) { formed = text; wait = !!live.wait; }
+        else if (!onPath && text) formed = text;
+      }
+    }
+    var isLegacy = w.k != null && session.lang !== "en";
+    var shown = isLegacy ? w.k : w.h;
+    var soFar = isLegacy ? (session.typed || "") : (formed || "");
+    var at = soFar && String(shown).indexOf(soFar) === 0 ? soFar.length : 0;
+    var cls = "box now" + (flash ? " miss" : "") + (isLegacy ? " devlys" : "");
+    if (at > 0 && at === String(shown || "").length) cls += " typed";
+    if (box.className !== cls) box.className = cls;
+    var caret = box.querySelector(".caret");
+    if (caret && caret.getAttribute("data-at") !== String(at)) caret.setAttribute("data-at", String(at));
+    var waitEl = box.querySelector(".wait");
+    if (wait && !waitEl) box.insertAdjacentHTML("afterbegin", '<span class="wait">मात्रा</span>');
+    else if (!wait && waitEl) waitEl.remove();
+  }
+  function syncFix() {
+    var root = document.getElementById("run");
+    if (!root) return;
+    var fix = root.querySelector(".fix");
+    var text = session.showFix && session.lastFix ? session.lastFix : "";
+    if (!text) { if (fix) fix.remove(); return; }
+    if (!fix) {
+      var host = root.querySelector(".mock") || root.querySelector(".stage");
+      if (!host) return;
+      fix = document.createElement("div");
+      fix.className = "fix";
+      host.appendChild(fix);
+    }
+    if (fix.textContent !== text) fix.textContent = text;
+  }
+  function patchMock() {
+    var typedLine = document.querySelector("#run .typed-line");
+    var passage = document.querySelector("#run .passage");
+    if (!typedLine || !passage) return false;
+    var now = typedLine.querySelector(".word.now");
+    if (!now || now.getAttribute("data-wi") !== String(session.wi)) {
+      typedLine.innerHTML = typedLineInner();
+      var exam = !!session.exam;
+      var words = passage.querySelectorAll(".word");
+      if (words.length === session.words.length) {
+        for (var i = 0; i < words.length; i++) {
+          var mark = "";
+          if (i === session.wi) mark = "now";
+          else if (!exam && i < session.wi) mark = session.marks[i] === "ok" ? "ok" : "bad";
+          words[i].classList.remove("now", "ok", "bad");
+          if (mark) words[i].classList.add(mark);
+        }
+      }
+    } else if (now.textContent !== (session.typed || "")) now.textContent = session.typed || "";
+    syncFix();
+    return true;
+  }
+  function patchLock() {
+    if (session.exam || (session.lesson && session.lesson.stage === "para")) return patchMock();
+    var stage = document.querySelector("#run .stage");
+    if (!stage) return false;
+    var line = stage.querySelector(".line");
+    if (!line) return false;
+    var boxes = line.querySelectorAll(".box");
+    var box = boxes[session.wi];
+    var nows = line.querySelectorAll(".box.now");
+    if (box && boxes.length === session.words.length && nows.length === 1 && nows[0] === box && box.querySelector(".caret")) {
+      applyLockBox(box);
+      syncFix();
+      return true;
+    }
+    var top = stage.scrollTop;
+    stage.innerHTML = lockHTML();
+    stage.scrollTop = top;
+    return true;
+  }
+  function paintKeyFace(el, showShift) {
+    if (!el) return;
+    var code = el.getAttribute("data-code");
+    if (!code || code === "Space" || code.indexOf("Shift") === 0) return;
+    var k = KD.BY_CODE[code];
+    if (!k) return;
+    var bigRaw = showShift ? k.shifted : k.normal;
+    var smallRaw = showShift ? k.normal : k.shifted;
+    var hi = el.querySelector(".hi");
+    var alt = el.querySelector(".altg");
+    if (hi) {
+      var big = KD.devlysKeyFace(bigRaw);
+      if (hi.textContent !== big) hi.textContent = big;
+      hi.setAttribute("aria-label", KD.keyFace(bigRaw) || "");
+    }
+    if (alt) {
+      var small = KD.devlysKeyFace(smallRaw);
+      if (alt.textContent !== small) alt.textContent = small;
+      alt.setAttribute("aria-label", KD.keyFace(smallRaw) || "");
+    }
+    var printed = el.querySelector(".printed-shift");
+    if (printed) printed.classList.toggle("active", !!showShift);
+  }
+  function syncGuide(next) {
+    var board = document.querySelector("#run .board");
+    if (board) {
+      var wantCode = next && next.type !== "alt" && next.code ? next.code : "";
+      var wantShift = !!(next && next.shift && next.type !== "alt");
+      var shiftSide = wantShift && next.finger ? KD.shiftHand(next.finger) : "";
+      var keep = {};
+      if (wantCode) keep[wantCode] = 1;
+      if (shiftSide === "left") keep.ShiftLeft = 1;
+      if (shiftSide === "right") keep.ShiftRight = 1;
+      var marked = board.querySelectorAll(".key.next");
+      for (var i = 0; i < marked.length; i++) {
+        var code = marked[i].getAttribute("data-code") || "";
+        if (keep[code]) continue;
+        marked[i].classList.remove("next");
+        marked[i].removeAttribute("style");
+        paintKeyFace(marked[i], false);
+      }
+      if (wantCode) {
+        var target = board.querySelector('.key[data-code="' + wantCode + '"]');
+        if (target) {
+          target.classList.add("next");
+          paintKeyFace(target, wantShift);
+        }
+      }
+      ["ShiftLeft", "ShiftRight"].forEach(function (code) {
+        var el = board.querySelector('.key[data-code="' + code + '"]');
+        if (!el) return;
+        el.classList.toggle("next", !!keep[code]);
+      });
+    }
+    var finger = next ? ((next.finger || "") + (next.shift ? ":s" : "")) : "";
+    if (session._hand === finger) return;
+    session._hand = finger;
+    if (!document.querySelector("#run .tc-hands-wrapper") || store.settings.hands === false) return;
+    setTimeout(function () {
+      if (!session || session._hand !== finger) return;
+      var live = document.querySelector("#run .tc-hands-wrapper");
+      if (!live) return;
+      var wrap = document.createElement("div");
+      wrap.innerHTML = handsSVG(next);
+      if (wrap.firstElementChild) live.replaceWith(wrap.firstElementChild);
+    }, 0);
+  }
+  function replaceRunChunk(selector, html, where) {
+    var node = document.querySelector(selector);
+    var stage = document.querySelector("#run .stage");
+    if (!html) { if (node) node.remove(); return; }
+    var wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    var fresh = wrap.firstElementChild;
+    if (!fresh) return;
+    if (node) node.replaceWith(fresh);
+    else if (stage) stage.insertAdjacentElement(where, fresh);
+  }
+  function syncProgress() {
+    var fill = document.querySelector("#run .tc-progress-fill");
+    if (!fill) return;
+    var pct = 0;
+    if (session.kind === "exact") pct = Math.min(100, Math.round(((session.i || 0) / (session.steps.length || 1)) * 100));
+    else pct = Math.min(100, Math.round(((session.wi || 0) / (session.words.length || 1)) * 100));
+    var width = pct + "%";
+    if (fill.style.width !== width) fill.style.width = width;
+  }
+  function revealCurrent() {
+    var stage = document.querySelector("#run .stage");
     var cur = document.querySelector(".box.now, .word.now");
     var wordMark = session.wi;
     if (session.kind === "exact") {
       var stNow = currentStep();
       wordMark = stNow && stNow.ti >= 0 ? stNow.ti : session.i;
     }
-    if (cur && wordMark !== session._scrolled) {
-      session._scrolled = wordMark;
-      if (stage && stage.contains(cur)) {
-        var stageRect = stage.getBoundingClientRect();
-        var curRect = cur.getBoundingClientRect();
-        if (curRect.top < stageRect.top) stage.scrollTop += curRect.top - stageRect.top;
-        else if (curRect.bottom > stageRect.top + stage.clientHeight) stage.scrollTop += curRect.bottom - stageRect.top - stage.clientHeight;
-      }
+    if (!cur || wordMark === session._scrolled) return;
+    session._scrolled = wordMark;
+    if (stage && stage.contains(cur)) {
+      var stageRect = stage.getBoundingClientRect();
+      var curRect = cur.getBoundingClientRect();
+      if (curRect.top < stageRect.top) stage.scrollTop += curRect.top - stageRect.top;
+      else if (curRect.bottom > stageRect.top + stage.clientHeight) stage.scrollTop += curRect.bottom - stageRect.top - stage.clientHeight;
     }
+  }
+  function paintTyping() {
+    if (typingFrame) { cancelAnimationFrame(typingFrame); typingFrame = 0; }
+    if (!canTypePatch()) { paint(); return; }
+    var next = guideStep();
+    // The Alt number pad only exists in a full paint.
+    if ((next && next.type === "alt") || document.querySelector("#run .numpad")) { paint(); return; }
+    var patched = session.kind === "exact" ? patchExact() : patchLock();
+    if (!patched) { paint(); return; }
+    var stamp = guideStamp(next);
+    if (session._guide !== stamp) {
+      session._guide = stamp;
+      syncGuide(next);
+      replaceRunChunk("#run .tc-hint-card", hintKeyPromptHTML(next), "afterend");
+    }
+    if (session.lesson && ["introduction", "combination", "recovery", "review"].indexOf(session.lesson.stage) >= 0) {
+      replaceRunChunk("#run .teaching-sequence", teachingSequenceHTML(next), "beforebegin");
+    }
+    syncProgress();
+    revealCurrent();
     placeCaret();
+  }
+  /* Keys are processed at once, in order. Their drawing is batched into the
+     next animation frame, so a burst of keys costs one repaint, not one each. */
+  var typingFrame = 0;
+  function paintTypingSoon() {
+    if (typingFrame) return;
+    var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+    typingFrame = raf(function () {
+      typingFrame = 0;
+      if (!session || screen !== "run" || session.phase !== "run") return;
+      paintTyping();
+    });
+  }
+  function paintClock() {
+    if (!session || session.phase !== "run" || session.paused) return;
+    var bs = document.querySelectorAll("#run .meters b");
+    if (bs.length < 3) return;
+    var timeText = session.limit ? clock(session.t0 ? remain() : session.limit) : clock(elapsed());
+    var wpm = fmt(KD.keyWpm(session.kind === "exact" ? session.correct : typedKeys(), elapsed()));
+    var accText = Math.round(accuracy()) + "%";
+    if (bs[0].textContent !== timeText) bs[0].textContent = timeText;
+    if (bs[1].textContent !== wpm) bs[1].textContent = wpm;
+    if (bs[2].textContent !== accText) bs[2].textContent = accText;
+    if (bs[3] && session.kind === "lock") {
+      var okw = 0;
+      session.marks.forEach(function (m) { if (m === "ok") okw++; });
+      var fourth = session.exam ? fmt(session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw)) : String(okw);
+      if (bs[3].textContent !== fourth) bs[3].textContent = fourth;
+    }
   }
 
   function accuracy() {
@@ -1353,7 +1843,7 @@
     var preview = session.kind === "exact" ? exactHTML() : lockHTML();
     var quietKeys = !!(session.practice40 && session.practice40.full) || (session.hints === "none" && (session.exam || (session.lesson && session.lesson.stage === "para")));
     var first = quietKeys ? null : (session.kind === "exact" ? (session.steps[0] || null) : nextLockStep());
-    return '<div class="lesson-ready"><p>' + esc(L.teach || 'Keep your fingers on the home row. Follow the highlighted key.') + '</p><p>Keep your computer’s keyboard input on English (US). The practice text uses DevLys 010.</p>' +
+    return '<div class="lesson-ready"><p>' + esc(L.teach || 'Keep your fingers on the home row. Follow the highlighted key.') + '</p>' + (L.source === 'practice-fallback' ? '<p>AI is unavailable. This is a sentence from the practice pool.</p>' : '') + '<p>Keep your computer’s keyboard input on English (US). The practice text uses DevLys 010.</p>' +
       '<button class="start-typing" id="start-run">Start Typing <span>Press Enter</span></button></div>' +
       teachingSequenceHTML(first) +
       '<div class="stage" style="--drill:' + drillSize() + 'px">' + preview + "</div>" +
@@ -1433,6 +1923,7 @@
       '<span class="over" aria-hidden="true">' + esc(target) + "</span>" +
       '<span class="caret" data-at="' + at + '"></span></span>';
   }
+  var caretWidths = {}, caretWidthCount = 0;
   function placeCaret() {
     var box = document.querySelector(".box.now");
     if (!box) return;
@@ -1450,10 +1941,22 @@
     var probe = document.createElement("span");
     probe.setAttribute("aria-hidden", "true");
     probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;left:0;top:0;pointer-events:none;";
-    box.appendChild(probe);
+    /* Each probe measurement forces a full layout. Prefix widths never change
+       for a given font and size, so remember them once the fonts are loaded. */
+    var canCache = !document.body.classList.contains("devlys-loading") && (!document.fonts || document.fonts.status === "loaded");
+    var cacheKey = drillSize() + "|" + (box.classList.contains("devlys") ? "d" : "") + "|" + (box.parentNode ? box.parentNode.className : "") + "|";
     function widthOf(s) {
-      probe.textContent = s || "";
-      return probe.getBoundingClientRect().width;
+      s = s || "";
+      var key = cacheKey + s;
+      if (canCache && Object.prototype.hasOwnProperty.call(caretWidths, key)) return caretWidths[key];
+      if (!probe.parentNode) box.appendChild(probe);
+      probe.textContent = s;
+      var w = probe.getBoundingClientRect().width;
+      if (canCache) {
+        if (++caretWidthCount > 4000) { caretWidths = {}; caretWidthCount = 0; }
+        caretWidths[key] = w;
+      }
+      return w;
     }
     function isMark(i) {
       var cp = text.charCodeAt(i);
@@ -1497,7 +2000,7 @@
     }
     caret.style.left = Math.max(0, origin + left * scale) + "px";
     caret.style.width = Math.max(4, width * scale) + "px";
-    probe.remove();
+    if (probe.parentNode) probe.remove();
   }
   function exactHTML() {
     var stepAt = session.steps[session.i];
@@ -1536,7 +2039,7 @@
       }
       if (past && session.badTokens && session.badTokens[index]) state = "bad";
       if (index && tok.line != null && tok.line !== session.tokens[index - 1].line) html += '<span class="line-break" aria-hidden="true"></span>';
-      html += boxHTML(state, tok.h || "·", formed, flash || !!(cur && session.badTokens && session.badTokens[index]), wait, tok.k, krutiSoFar(index));
+      html += boxHTML(state, tok.h || "·", formed, flash || !!(cur && session.badTokens && session.badTokens[index]), wait, tok.k, krutiSoFar(index)).replace("<span ", '<span data-i="' + index + '" ');
     });
     return html + "</div>";
   }
@@ -1580,6 +2083,12 @@
       else if (!exam && i < session.wi) c = session.marks[i] === "ok" ? "ok" : "bad";
       master += '<span class="word ' + c + (session.lang === 'en' ? '' : ' devlys') + '" aria-label="' + esc(w.h) + '">' + esc(session.lang === 'en' ? w.h : w.k) + "</span> ";
     });
+    return '<div class="mock"><div class="mock-pane"><div class="mock-k">Master</div><div class="passage' + cls + '">' + master + "</div></div>" +
+      '<div class="mock-pane"><div class="mock-k">Type</div><div class="typed-line' + cls + '">' + typedLineInner() + "</div></div>" +
+      (session.showFix && session.lastFix ? '<div class="fix">' + esc(session.lastFix) + "</div>" : "") +
+      "</div>";
+  }
+  function typedLineInner() {
     var typed = "";
     var snaps = session.typedWords || [];
     for (var i = 0; i < session.wi; i++) {
@@ -1587,12 +2096,8 @@
       var text = snap ? snap.text : session.words[i].h;
       typed += '<span class="word ' + (session.marks[i] === "ok" ? "ok" : "bad") + (session.lang === 'en' ? '' : ' devlys') + '">' + esc(session.lang === 'en' ? text : (snap && snap.raw != null ? snap.raw : session.words[i].k)) + "</span> ";
     }
-    var cur = esc(session.typed || "");
-    typed += '<span class="word now' + (session.lang === 'en' ? '' : ' devlys') + '">' + cur + "</span>";
-    return '<div class="mock"><div class="mock-pane"><div class="mock-k">Master</div><div class="passage' + cls + '">' + master + "</div></div>" +
-      '<div class="mock-pane"><div class="mock-k">Type</div><div class="typed-line' + cls + '">' + typed + "</div></div>" +
-      (session.showFix && session.lastFix ? '<div class="fix">' + esc(session.lastFix) + "</div>" : "") +
-      "</div>";
+    typed += '<span class="word now' + (session.lang === 'en' ? '' : ' devlys') + '" data-wi="' + session.wi + '">' + esc(session.typed || "") + "</span>";
+    return typed;
   }
 
   function numpadHTML(num) {
@@ -1619,6 +2124,7 @@
   function beginRun() {
     session.phase = "run";
     if (session.practice40) { session.practice40.guided = !session.practice40.full; session.t0 = performance.now(); }
+    if (session.rhythmBurst) session.t0 = performance.now();
     session.holding = true;
     paint();
     ensureTick();
@@ -1632,7 +2138,7 @@
         togglePause(); session.autoPause = true; return;
       }
       if (session.limit && session.t0 && remain() <= 0) finish();
-      else paint();
+      else paintClock();
     }, 400);
   }
 
@@ -1653,7 +2159,7 @@
     store.touch = noted.touch;
     session.lastTap = { id: id, t: now, ti: step.ti };
     session.tapN = (session.tapN || 0) + 1;
-    if (session.tapN % 12 === 0) save();
+    if (session.tapN % 12 === 0) saveSoon();
   }
   function recordSkill(step, ok) {
     if (!step || !session) return;
@@ -1684,10 +2190,10 @@
     session.flash = performance.now();
     setTimeout(function () {
       if (!session || session.phase !== "run") return;
-      if (session.flash && performance.now() - session.flash >= 200) paint();
+      if (session.flash && performance.now() - session.flash >= 200) paintTyping();
     }, 230);
   }
-  function miss(code, info) {
+  function miss(code, info, holdPaint) {
     session.errors++;
     var expected = currentStep();
     recordSkill(expected, false);
@@ -1695,10 +2201,12 @@
     pushTape(false, info || null);
     var missedId = expected && expected.code === code ? KD.actionId(expected) : code;
     if (missedId) store.misses[missedId] = (store.misses[missedId] || 0) + 1;
-    beep(false);
-    save();
     armFlash();
-    paint();
+    saveSoon();
+    if (!holdPaint) {
+      paintTypingSoon();
+      beepLater(false);
+    }
   }
   function advance() {
     session.handWarn = false;
@@ -1714,12 +2222,14 @@
     session.correct++;
     if (!session.t0) session.t0 = performance.now();
     session.i++;
-    beep(true);
-    if (session.i >= session.steps.length) finish();
-    else {
-      paint();
-      if (session.live) save();
+    if (session.i >= session.steps.length) {
+      beepLater(true);
+      finish();
+      return;
     }
+    paintTypingSoon();
+    beepLater(true);
+    if (session.live) saveSoon();
   }
   function finishAlt() {
     var step = currentStep();
@@ -1740,7 +2250,6 @@
           want: step && step.type === "alt" ? "Alt+" + step.num : faceOfStep(step),
           got: buf || ""
         });
-        paint();
       }
     } else {
       if (!isNaN(got)) {
@@ -1752,7 +2261,7 @@
         session.typed += chAlt;
       }
       if (!session.t0) session.t0 = performance.now();
-      paint();
+      paintTyping();
     }
   }
 
@@ -1777,9 +2286,11 @@
     if (session && screen === 'run' && (e.altKey || e.key === 'Alt' || e.ctrlKey || e.metaKey)) { e.preventDefault(); return; }
     if (e.ctrlKey || e.metaKey) return;
     if (session && screen === 'run' && (e.code === session.anchor || e.code === 'ShiftLeft' || e.code === 'ShiftRight')) {
-      session.techniqueWarn = '';
       if (e.code === session.anchor) e.preventDefault();
-      paint();
+      /* Shift is pressed for every half letter and auto-repeats while held.
+         A full lesson rebuild on each of those events blocked the next key.
+         Repaint only when a technique warning really clears. */
+      if (session.techniqueWarn) { session.techniqueWarn = ''; paint(); }
       return;
     }
     if (screen === "result" || screen === "lesson") {
@@ -1877,13 +2388,15 @@
         recordPosition(step, false, true);
         session.i--;
         refreshTokenErrors(session.steps[session.i].ti);
-        forgetTiming(); paint();
+        forgetTiming(); paintTypingSoon();
       }
       return;
     }
     if (e.code === step.code && !!e.shiftKey === !!step.shift) advance();
     else {
       if (!session.t0) session.t0 = performance.now();
+      var moveOn = store.settings.blockErrors !== true && !session.lesson.scoreFree;
+      // When the cursor moves on, paint once after the move instead of twice.
       miss(step.code, {
       si: session.i,
       ti: step.ti != null ? step.ti : -1,
@@ -1891,12 +2404,13 @@
       word: wordAtStep(step),
       want: faceOfStep(step),
       got: faceOfEvent(e)
-      });
-      if (store.settings.blockErrors !== true && !session.lesson.scoreFree) {
+      }, moveOn);
+      if (moveOn) {
         if (step.ti != null) refreshTokenErrors(step.ti);
         session.i++;
+        beepLater(false);
         if (session.i >= session.steps.length) finish();
-        else { paint(); if (session.live) save(); }
+        else { paintTypingSoon(); if (session.live) saveSoon(); }
       }
     }
   }
@@ -1918,7 +2432,7 @@
       e.preventDefault();
       if (session.typed.length) session.typed = session.typed.slice(0, -1);
       forgetTiming();
-      paint();
+      paintTypingSoon();
       return;
     }
     if (e.code === "Space" || e.key === " " || e.code === "Enter" || e.key === "Enter") {
@@ -1958,7 +2472,8 @@
     }
     session.typed += ch;
     if (session.typed.length > 48) session.typed = session.typed.slice(0, 48);
-    paint();
+    // Only the current word changes; do not rebuild the passage and keyboard.
+    paintTypingSoon();
   }
 
   document.addEventListener("keyup", function (e) {
@@ -1973,6 +2488,8 @@
       finishAlt();
     }
   });
+  // Remember when the last key arrived, so background saves wait for a pause.
+  document.addEventListener("keydown", function () { lastKeyAt = performance.now(); }, true);
   document.addEventListener("keydown", onKeyDown);
   window.addEventListener('blur', function () {
     heldKeys = {};
@@ -2011,8 +2528,8 @@
     session.wi++;
     if (session.wi >= session.words.length) finish();
     else {
-      paint();
-      if (session.live) save();
+      paintTypingSoon();
+      if (session.live) saveSoon();
     }
   }
 
@@ -2069,7 +2586,7 @@
     else if (session.lesson && session.lesson.id === "coach") store.touch.rest = session.coachId || "coach";
     var at = Date.now();
     if (session.practice40 && ms >= 120000) {
-      store.practice40 = KD.mergePractice40(store.practice40, { attempts: [{ at: at, ms: ms, wpm: session.result.wpm, acc: session.result.acc, realAcc: session.result.realAcc, full: session.practice40.full, guided: session.practice40.guided }] });
+      store.practice40 = KD.mergePractice40(store.practice40, { attempts: [{ at: at, ms: ms, wpm: session.result.wpm, acc: session.result.acc, realAcc: session.result.realAcc, full: session.practice40.full, guided: session.practice40.guided, sentenceIds: session.practice40.sentenceIds, signature: KD.livePassageSignature(session.lesson) }] });
     }
     if (session.measurements && !session.exam) store.profile = KD.updateProfile(store.profile, session.measurements, at);
     if (session.index >= 0 && !session.lesson.scoreFree) session.recovery = KD.buildRecovery(KD.LESSONS[session.index], store, session.slips || []);
@@ -2105,6 +2622,7 @@
       title: session.lesson ? session.lesson.title : "",
       index: session.index,
       scoreFree: !!(session.lesson && session.lesson.scoreFree),
+      ms: ms,
       acc: Math.round((session.result && session.result.acc) || 0),
       realAcc: session.result && session.result.realAcc != null ? session.result.realAcc : null,
       wpm: Math.round(((session.result && session.result.wpm) || 0) * 10) / 10,
@@ -2114,6 +2632,7 @@
     if (store.log.length > 24) store.log = store.log.slice(store.log.length - 24);
     if (session.live && session.lesson && store.live && store.live.lesson) {
       store.live.resume = null;
+      if (session.lesson.pattern === 'history') KD.recordSentenceUsage(store.live, session.lesson, at);
       store.stars[session.lesson.id] = Math.max(store.stars[session.lesson.id] || 0, session.result.stars || 0);
       var slips = [];
       (session.slips || []).forEach(function (sl) {
@@ -2126,12 +2645,16 @@
         pattern: session.lesson.pattern || store.live.lesson.pattern,
         stars: session.result.stars || 0,
         acc: Math.round(session.result.acc || 0),
+        realAcc: session.result.realAcc == null ? null : session.result.realAcc,
+        ms: ms,
         wpm: Math.round((session.result.wpm || 0) * 10) / 10,
         min: session.lesson.min || 0,
         mid: session.lesson.mid || 0,
         high: session.lesson.high || 0,
         words: (session.tokens || []).map(function (t) { return t.h; }).slice(0, 24),
         slips: slips.slice(0, 12),
+        sentenceIds: session.lesson.sentenceIds || [],
+        passageSig: KD.livePassageSignature(session.lesson),
         at: at
       });
       if (store.live.past.length > 40) store.live.past = store.live.past.slice(-40);
@@ -2147,8 +2670,10 @@
         words: (session.tokens || []).map(function (t) { return t.h; })
       });
       store.live.lesson = KD.composeLive(store);
+      store.live.updatedAt = Math.max(at + 1, (store.live.updatedAt || 0) + 1);
       askCoach();
     }
+    session.phase = "done";
     save(true);
     screen = "result";
     session.phase = "done";
@@ -2158,6 +2683,7 @@
       soundFanfare(1);
     }
     draw();
+    if (session && session.live && session.phase === 'done') requestAISentence(store.live.lesson);
   }
 
   function applyPlacement() {
@@ -2561,8 +3087,10 @@
 
   function resultHTML() {
     if (!session || !session.result) return '<div class="wrap"><div class="card">No result.</div></div>';
+    if (session.live && (!store.live || !store.live.lesson)) ensureLive();
     var r = session.result;
     if (session.placement) return placementResult(r);
+    if (session.rhythmBurst) return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><h1>Rhythm practice complete</h1><p>' + Math.round(r.realAcc == null ? r.acc : r.realAcc) + '% first-try accuracy. This short burst is practice; it does not count as passage speed.</p><p>Rest for at least 30 seconds. Then use the same relaxed rhythm on fresh text.</p><div class="row-btns"><button class="btn primary" data-act="start-current">Fresh sentence practice</button><button class="btn" data-go="home">Daily plan</button></div></section></main>';
     if (session.practice40Weak) return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi practice</div><h1>Combination practice complete</h1><p>Take this steady rhythm into your next speed check. These short drills build accuracy; they do not count as passage speed.</p><div class="row-btns"><button class="btn primary" data-act="practice40-check">Check my speed</button><button class="btn" data-act="practice40-weak">More combination practice</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
     if (session.lesson.scoreFree) {
       var recovery = session.recoveryFor != null;
@@ -2580,6 +3108,7 @@
         '<h1>' + (stars >= 3 ? 'Well done!' : stars >= 1 ? 'Lesson passed' : 'Let’s practice again') + '</h1>' + starFanfareHTML(stars) +
         '<div class="dials">' + dialHTML('Accuracy', Math.round(r.acc || 0) + '%', r.acc || 0, false) + dialHTML('Time', dur(r.ms), 0, true) + dialHTML('Speed', fmt(r.wpm || 0), Math.min(100, (r.wpm || 0) / (session.lesson.high || 40) * 100), false) + '</div>' +
         '<p class="small muted">' + Math.round(r.realAcc == null ? r.acc : r.realAcc) + '% first-try accuracy. Pass: ' + (session.lesson.acc || 94) + '% accuracy and ' + (session.lesson.min || 3) + ' WPM. Goal speed: ' + (session.lesson.high || 40) + ' WPM.</p>' +
+        (session.live ? '<p role="status">' + (store.live.lesson.aiGenerated ? 'Your next AI-generated sentences are ready.' : store.live.lesson.aiState === 'unavailable' ? 'AI is unavailable. ' + (store.live.lesson.aiDetail ? esc(store.live.lesson.aiDetail) + ' ' : '') + 'Continue opens practice-pool text; you can retry AI generation.' : 'Preparing new AI sentences from your weak keys…') + '</p>' + (store.live.lesson.aiState === 'unavailable' ? '<button class="btn" data-act="retry-ai-sentence">Retry AI generation</button>' : '') : '') +
         (session.recovery ? '<p class="practice-feedback">Practise ' + esc(session.recovery.title) + ' in a short review.</p>' : '') +
         '<div class="row-btns"><button class="btn primary" data-act="' + nextAction + '">' + (nextAction === 'repair' ? 'Practise ' + esc(session.recovery.title) : nextAction === 'retry' ? 'Practice Again' : 'Continue') + '</button>' +
         (session.recovery && nextAction !== 'repair' ? '<button class="btn" data-act="repair">Practise difficult keys</button>' : '') + '<button class="btn" data-act="retry">Restart</button><button class="btn ghost" data-go="home">Lesson Map</button></div><p class="small muted">Press Enter to continue</p></section>' +
@@ -2670,11 +3199,20 @@
       showAuthModal = false;
       fetch("/api/progress", {
         headers: { "Authorization": "Bearer " + authToken, "Cache-Control": "no-store" }
-      }).then(function (r) { if (!r.ok) throw new Error("Cloud unavailable"); return r.json(); }).then(function (cloudStore) {
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (!r.ok) { var err = new Error("Cloud unavailable"); err.code = data && data.code || ""; throw err; }
+          return data;
+        });
+      }).then(function (cloudStore) {
         if (cloudStore && cloudStore.stars) adoptFile(JSON.stringify(cloudStore));
         syncStatus("Saved to cloud");
         draw();
-      }).catch(function () { syncStatus("Saved on this device · cloud unavailable"); draw(); });
+      }).catch(function (error) {
+        folderSave = true;
+        if (!noteCloudPause(error)) syncStatus("Saved on this device · cloud unavailable");
+        draw();
+      });
     }).catch(function () {
       if (errEl) { errEl.textContent = "Network error. Please try again."; errEl.style.display = "block"; }
     });
@@ -2706,6 +3244,8 @@
   }
 
   function act(name) {
+    if (name === 'new-ai-sentence') { startLive('new'); return; }
+    if (name === 'retry-ai-sentence') { delete sentenceJobs[store.live.lesson.id]; requestAISentence(store.live.lesson); draw(); return; }
     if (name === 'jump-current') {
       var tile = document.querySelector('[data-lesson="' + nextLessonIndex() + '"]');
       if (tile) { tile.scrollIntoView({ block: 'center', behavior: 'smooth' }); tile.focus({ preventScroll: true }); }
@@ -2714,14 +3254,8 @@
     if (name === 'previous-lesson') { moveCourseLesson(-1); return; }
     if (name === 'next-lesson') { moveCourseLesson(1); return; }
     if (name === 'practice40-check') { startPractice40(); return; }
-    if (name === 'practice40-weak') {
-      var current = nextLessonIndex(), state = KD.practice40State(store);
-      if (!state.canStart) { startLesson(current); return; }
-      var src = { title: 'Familiar combinations', tokens: state.bank, reviewPool: state.bank, allowed: state.allowed };
-      var recovery = KD.buildRecovery(src, store, session && session.slips || []) || { title: 'familiar combinations', teach: 'Keep a smooth rhythm. Practise these known pairs and words slowly before increasing speed.', tokens: KD.progressiveReview(src, store) };
-      if (!recovery.tokens.length) { startLesson(current); return; }
-      startLesson(current, recovery); session.index = -1; session.recoveryFor = null; session.practice40Weak = true; session.lesson.allowed = state.allowed; session.lesson.anchor = null; session.anchor = null; session.hand = ''; session.lesson.hand = ''; paintShell(); return;
-    }
+    if (name === 'practice40-weak') { startWeak(); return; }
+    if (name === 'rhythm-burst') { startRhythmBurst(); return; }
     if (name === 'repair') { if (session && session.recovery && session.index >= 0) startLesson(session.index, session.recovery); return; }
     if (name === 'return-course') { if (session && session.recoveryFor != null) startLesson(session.recoveryFor); return; }
     if (name === 'lesson-history') { screen = 'lesson'; draw(); return; }
@@ -2827,6 +3361,8 @@
       return;
     }
     if (name === "retry") {
+      if (session && session.live) { startLive('repeat'); return; }
+      if (session && session.rhythmBurst) { startRhythmBurst(); return; }
       if (session && session.practice40Weak) { act("practice40-weak"); return; }
       if (session && session.recoveryFor != null) { var index = session.recoveryFor; startLesson(index, KD.buildRecovery(KD.LESSONS[index], store, [])); }
       else if (session && session.practice40) startPractice40();
@@ -2866,9 +3402,32 @@
   }
 
   function startWeak() {
-    var current = nextLessonIndex();
-    var recovery = KD.buildRecovery(KD.LESSONS[current], store, []);
-    startLesson(current, recovery);
+    var recovery = KD.adaptiveRecovery(store);
+    if (!recovery || !Array.isArray(recovery.tokens) || !recovery.tokens.length) { startLesson(nextLessonIndex()); return; }
+    startLesson(0, recovery);
+    session.index = -1; session.recoveryFor = null; session.practice40Weak = true;
+    session.lesson.id = 'adaptive-drill'; session.lesson.title = recovery.title;
+    session.lesson.teach = recovery.teach; session.lesson.allowed = recovery.allowed;
+    session.lesson.hand = ''; session.hand = ''; session.lesson.anchor = null; session.anchor = null;
+    session.lesson.oppositeShift = false;
+    store.adaptive = store.adaptive || { drills: [] };
+    store.adaptive.drills = (store.adaptive.drills || []).concat({ at: Date.now(), signature: recovery.signature, words: recovery.words }).slice(-8);
+    save(true); paintShell();
+  }
+
+  function startRhythmBurst() {
+    var program = KD.trainingProgram(store);
+    if (!program.burstEligible) { startWeak(); return; }
+    startWeak();
+    if (!session || !session.practice40Weak) return;
+    var base = session.tokens.slice(), tokens = [];
+    while (KD.buildSteps(tokens).length < 550) tokens = tokens.concat(base.map(function (t) { return Object.assign({}, t); }));
+    session.tokens = tokens; session.lesson.tokens = tokens; session.steps = KD.buildSteps(tokens);
+    session.words = tokens.map(function (t) { return { h: t.h, k: t.k, lang: 'hi' }; });
+    session.practice40Weak = false; session.rhythmBurst = true; session.limit = 25000;
+    session.lesson.id = 'adaptive-burst'; session.lesson.title = '25-second rhythm practice';
+    session.lesson.teach = 'Practise smooth presses near ' + program.nextTargetWpm + ' WPM. Keep 98% first-try accuracy. Use the same fingers and small movements. This short burst does not measure passage speed.';
+    paintShell();
   }
 
   function startCoach() { startWeak(); }
@@ -2883,25 +3442,40 @@
   }
 
   function refreshCloud() {
-    if (!authToken || !folderSave || screen === 'run') return;
+    if (!authToken || !folderSave || screen === 'run') return Promise.resolve(false);
+    if (cloudPausedUntil && Date.now() < cloudPausedUntil) return Promise.resolve(false);
+    if (cloudReadJob) return cloudReadJob;
     var token = authToken;
-    flushCloud().then(function () {
+    cloudReadJob = flushCloud().then(function () {
+      if (cloudPausedUntil && Date.now() < cloudPausedUntil) return null;
       return fetch('/api/progress',{headers:{Authorization:'Bearer '+token},cache:'no-store'});
-    }).then(function(r){if (!r.ok) throw new Error('Cloud unavailable'); return r.json();}).then(function(data){
-      if (authToken !== token || !data.stars) return;
+    }).then(function(r){
+      if (!r) return null;
+      return r.json().catch(function(){return {};}).then(function(data){
+        if (!r.ok) { var err = new Error('Cloud unavailable'); err.code = data && data.code || ''; throw err; }
+        return data;
+      });
+    }).then(function(data){
+      if (!data || authToken !== token || !data.stars) return false;
       store = KD.mergeProgress(store, data); localStorage.setItem(STORE, JSON.stringify(store));
+      ensureTraining();
       if (!pendingCloud) syncStatus('Saved to cloud');
-      draw();
-    }).catch(function(){syncStatus('Saved on this device · cloud unavailable');});
+      if (screen !== 'run') draw();
+      return true;
+    }).catch(function(error){ if (!noteCloudPause(error)) syncStatus('Saved on this device · cloud unavailable'); return false; })
+      .then(function (ok) { cloudReadJob = null; return ok; });
+    return cloudReadJob;
   }
   window.addEventListener('focus', refreshCloud);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') refreshCloud(); });
+  setInterval(function () { if (document.visibilityState === 'visible' && screen !== 'run') refreshCloud(); }, 45000);
   window.addEventListener('online', function(){if (pendingCloud) flushCloud();else refreshCloud();});
   window.addEventListener('pagehide', function () {
     if (!authToken || !folderSave) return;
     captureResume();
     var body = JSON.stringify(store);
     localStorage.setItem(STORE, body);
-    if (pendingCloud && body.length < 60000) fetch('/api/progress',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+authToken},body:body,keepalive:true}).catch(function(){});
+    if (pendingCloud && body.length < 60000 && !(cloudPausedUntil && Date.now() < cloudPausedUntil)) fetch('/api/progress',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+authToken},body:body,keepalive:true}).catch(function(){});
   });
   window.addEventListener("beforeunload", function () {
     if (session && session.live && session.phase !== "done") save();
@@ -2914,14 +3488,14 @@
         if (!session) draw();
         else if (session.live && store.live && store.live.lesson && session.lesson && session.lesson.id !== store.live.lesson.id) {
           session = null;
-          if (resumeMid(liveResume())) startLive();
+          if (liveResume()) startLive();
           else draw();
         }
         return;
       }
       shown = true;
       booting = false;
-      if (resumeMid(liveResume())) startLive();
+      if (liveResume()) startLive();
       else draw();
     }
     var timer = setTimeout(show, 1000);
@@ -2945,16 +3519,25 @@
         }).catch(function () {});
     }
     fetch("/api/progress", { headers: headers, cache: "no-store" }).then(function (r) {
-      if (!r.ok) throw new Error("no file");
-      return r.text();
+      return r.text().then(function (text) {
+        if (!r.ok) {
+          var err = new Error("no file");
+          try { var body = JSON.parse(text); if (body && body.code) err.code = body.code; } catch (e) {}
+          throw err;
+        }
+        return text;
+      });
     }).then(function (text) {
       clearTimeout(timer);
       adoptFile(text);
       syncStatus(authToken ? "Saved to cloud" : "Saved in this folder");
       show();
-    }).catch(function () {
+    }).catch(function (err) {
       clearTimeout(timer);
-      folderSave = false;
+      if (authToken) {
+        folderSave = true;
+        if (!noteCloudPause(err)) { syncStatus('Saved on this device · cloud save pending'); save(true); }
+      } else folderSave = false;
       show();
     });
   })();

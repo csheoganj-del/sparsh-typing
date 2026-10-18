@@ -44,6 +44,15 @@ module.exports = async function handler(req, res) {
   const username = getUsernameFromReq(req);
   if (!username) { res.statusCode = 401; return res.json({ error: "Sign in to save and load your progress." }); }
 
+  function fail(err, action, fallback) {
+    console.error(action, err && err.message);
+    const paused = !!(err && (err.code === "STORAGE_PAUSED" || err.name === "BlobStoreSuspendedError" || /suspended/i.test(err.message || "")));
+    res.statusCode = paused ? 503 : 500;
+    return res.json(paused
+      ? { error: "Cloud storage is paused", code: "storage_paused" }
+      : { error: fallback, details: String((err && err.message) || "").slice(0, 180) });
+  }
+
   if (req.method === "GET") {
     try {
       const progress = await db.getProgress(username);
@@ -51,8 +60,7 @@ module.exports = async function handler(req, res) {
       res.statusCode = 200;
       return res.end(JSON.stringify(progress));
     } catch (err) {
-      res.statusCode = 500;
-      return res.json({ error: "Failed to read progress", details: err.message });
+      return fail(err, "progress read failed", "Failed to read progress");
     }
   }
 
@@ -67,8 +75,7 @@ module.exports = async function handler(req, res) {
       res.statusCode = 200;
       return res.json({ ok: true, cloud: db.isCloudConnected(), username: username, progress: progress });
     } catch (err) {
-      res.statusCode = 500;
-      return res.json({ error: "Failed to save progress", details: err.message });
+      return fail(err, "progress save failed", "Failed to save progress");
     }
   }
 

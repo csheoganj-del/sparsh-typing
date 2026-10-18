@@ -591,6 +591,9 @@
 
   KD.weakKeyNames = function (store) {
     store = store || {};
+    if (KD.adaptivePlan) {
+      return (KD.adaptivePlan(store).targetKeys || []).slice(0, 3).map(function (id) { return KD.actionLabel(id); }).filter(Boolean);
+    }
     var misses = store.misses || {};
     var names = [];
     if ((misses.Space || 0) >= 10) names.push("Space");
@@ -613,6 +616,7 @@
   }
 
   function targetKeyIds(store) {
+    if (KD.adaptivePlan) return (KD.adaptivePlan(store || {}).targetKeys || []).slice(0, 6);
     var misses = (store && store.misses) || {};
     var rows = [];
     Object.keys(misses).forEach(function (id) {
@@ -632,7 +636,10 @@
   }
 
   /* Real exam lines only: short clerical sentences, then the passage bank. */
+  var cachedExamText = null, cachedExamLines = [];
   function examLines() {
+    var text = (KD.HI_SENTENCES || []).join('\n');
+    if (text === cachedExamText) return cachedExamLines;
     var lines = [];
     var seen = {};
     function add(words, passage) {
@@ -653,6 +660,8 @@
     (KD.HI_SENTENCES || []).forEach(function (sentence) {
       add(String(sentence).split(/\s+/).filter(Boolean), 1);
     });
+    cachedExamText = text;
+    cachedExamLines = lines;
     return lines;
   }
 
@@ -670,67 +679,88 @@
     return { hit: hit, covered: Object.keys(covered).length };
   }
 
-  function historyTokens(store, bank) {
-    var last = lastHistory(store);
-    if (last && (last.stars || 0) < 5 && Array.isArray(last.words) && last.words.length) {
-      var replay = [];
-      last.words.forEach(function (h) {
-        var tok = tokenFor(h, bank);
-        if (tok) replay.push({ h: tok.h, k: tok.k });
-      });
-      if (replay.length) return replay;
-    }
+  function sentenceUsage(live) {
+    var usage = JSON.parse(JSON.stringify(live && live.sentenceUsage || {}));
+    (live && live.past || []).forEach(function (row) {
+      if (row.pattern !== 'history') return;
+      var lines = row.sentenceIds || ((row.words || []).join(' ').match(/[^।]+।/g) || []).map(function (s) { return s.trim(); });
+      lines.forEach(function (line) { if (!usage[line]) usage[line] = { count: 1, at: row.at || 0 }; });
+    });
+    return usage;
+  }
+  KD.recordSentenceUsage = function (live, lesson, at) {
+    var usage = sentenceUsage(live);
+    (lesson.sentenceIds || []).forEach(function (line) {
+      var before = usage[line] || { count: 0, at: 0 };
+      usage[line] = { count: before.count + 1, at: at };
+    });
+    live.sentenceUsage = usage;
+  };
+
+  function historyTokens(store, bank, random) {
+    var usage = sentenceUsage(store.live);
+    var practice = KD.mergePractice40 ? KD.mergePractice40(store.practice40) : store.practice40;
+    if (KD.mergeSentenceUsage) usage = KD.mergeSentenceUsage(usage, practice && practice.sentenceUsage);
+    var rng = random || Math.random;
     var ids = targetKeyIds(store);
     var ranked = examLines().map(function (row, index) {
       var score = lineScore(row.line, ids);
       var length = row.line.length;
       var limit = row.passage ? 16 : 12;
       var fit = length >= 4 && length <= limit ? 1 : 0;
-      return { line: row.line, passage: row.passage, index: index, hit: score.hit, covered: score.covered, fit: fit, length: length };
+      var sig = row.line.map(function (t) { return t.h; }).join(' ');
+      var used = usage[sig] || { count: 0, at: 0 };
+      return { line: row.line, sig: sig, used: used.count, at: used.at, passage: row.passage, tie: rng(), index: index, hit: score.hit, covered: score.covered, fit: fit, length: length };
     });
-    ranked = ranked.filter(function (row) { return !ids.length || row.hit > 0; });
     ranked.sort(function (a, b) {
-      return (b.covered - a.covered) || (b.passage - a.passage) || (b.fit - a.fit) || (b.hit - a.hit) || (a.length - b.length) || (a.index - b.index);
+      return (a.used - b.used) || (a.at - b.at) || (b.covered - a.covered) || (b.passage - a.passage) || (b.fit - a.fit) || (b.hit - a.hit) || (a.tie - b.tie) || (a.index - b.index);
     });
     var seq = [];
+    var sentenceIds = [];
     var used = {};
-    for (var i = 0; i < ranked.length && seq.length < 8; i++) {
+    for (var i = 0; i < ranked.length && sentenceIds.length < 2; i++) {
       var line = ranked[i].line;
       var sig = line.map(function (t) { return t.h; }).join(" ");
       if (used[sig]) continue;
-      if (seq.length && seq.length + line.length > 18) continue;
+      if (seq.length && seq.length + line.length > 40) continue;
       used[sig] = 1;
+      sentenceIds.push(sig);
       line.forEach(function (tok) { seq.push({ h: tok.h, k: tok.k }); });
-      if (seq.length >= 7) break;
     }
     if (!seq.length && ranked.length) {
       ranked[0].line.forEach(function (tok) { seq.push({ h: tok.h, k: tok.k }); });
     }
-    return seq.slice(0, 18);
+    return { tokens: seq, sentenceIds: sentenceIds };
   }
 
-  KD.historyLesson = function (store) {
+  KD.historyLesson = function (store, random) {
     store = store || {};
     var bank = historyBank();
-    var bars = KD.starBars(store, { min: 14, mid: 22, high: 32, cap: 40, acc: 94 });
+    var cap = KD.PRACTICE_TARGET || 50;
+    var bars = KD.starBars(store, { min: 14, mid: 22, high: 32, cap: cap, acc: 94 });
     var names = KD.weakKeyNames(store);
-    var tokens = historyTokens(store, bank);
+    var selection = historyTokens(store, bank, random);
+    var tokens = selection.tokens;
     var past = pastOf(store);
     var count = 0;
-    past.forEach(function (row) { if (row && row.pattern === "history") count++; });
+    past.concat(store.live && store.live.lesson ? [store.live.lesson] : []).forEach(function (row) {
+      var match = row && /^hist-(\d+)$/.exec(row.id || '');
+      if (match) count = Math.max(count, Number(match[1]));
+    });
     var last = lastHistory(store);
-    var held = last && (last.stars || 0) < 5;
     var who = names.length ? names.join(", ") : "the keys from your last lessons";
     return {
       id: "hist-" + (count + 1),
       pattern: "history",
       layer: "history",
       title: "Exam sentence · " + (names[0] || "your keys") + " · " + bars.high + " WPM",
-      teach: "An exam sentence formed with " + who + ". The words stay in sentence order, the way a passage is dictated. Pass at " + bars.min + " WPM. Five stars needs " + bars.high + " WPM and " + bars.acc + "% accuracy. " +
-        (held ? "The last run was under five stars, so this sentence and this bar stay." : "A five-star run raises the next bar by 2 WPM, up to 40.") +
+      teach: "A Hindi sentence exercise using varied practice text, with extra attention to " + who + ". The words stay in sentence order. Unused sentences come first. Pass at " + bars.min + " WPM and " + bars.acc + "% accuracy. Practice goal: " + bars.high + " WPM with 98% first-try accuracy. Stars also account for accuracy. " +
+        "Completing the sentence gives you a new sentence. Reaching the goal with 98% accuracy on both measures raises the next bar by 2 WPM, up to " + cap + "." +
         " Nothing new is added while you type.",
-      why: ["A real exam line that uses the keys you miss. Five stars at " + bars.high + " WPM."],
+      why: ["Hindi practice sentences with no repeats until the sentence pool is used. Practice goal: " + bars.high + " WPM with 98% first-try accuracy."],
       tokens: tokens,
+      sentenceIds: selection.sentenceIds,
+      source: 'practice-pool',
       words: tokens.map(function (t) { return t.h; }),
       wordlock: false,
       hints: "hindi",
@@ -755,9 +785,9 @@
     return liveCopy(store, pattern);
   };
 
-  KD.composeLive = function (store) {
+  KD.composeLive = function (store, random) {
     store = store || {};
-    if (KD.courseComplete(store) || ladderCleared(store)) return KD.historyLesson(store);
+    if (KD.courseComplete(store) || ladderCleared(store)) return KD.historyLesson(store, random);
     var past = pastOf(store);
     var pattern = choosePattern(store);
     var tokens = pattern.lines ? lineLesson(store) : (pattern.ch ? charLesson(pattern, store) : wordLesson(pattern, store));

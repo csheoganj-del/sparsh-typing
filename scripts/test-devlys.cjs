@@ -33,7 +33,7 @@ assert.equal(KD.LESSONS[199].tokens[0].h, '/');
 const commit = app.slice(app.indexOf('  function commitWord('), app.indexOf('  function finish('));
 for (const typed of ['dsoy','dsssssoy']) {
   const s = {lang:'hi', words:[{h:'केवल',k:'dsoy'},{h:'र',k:'j'}], wi:0, typed, t0:1, marks:[], wrong:[]};
-  const ctx = vm.createContext({KD, session:s, performance:{now:()=>1}, pushTape(){}, beep(){}, rememberTap(){}, forgetTiming(){}, paint(){}});
+  const ctx = vm.createContext({KD, session:s, performance:{now:()=>1}, pushTape(){}, beep(){}, rememberTap(){}, forgetTiming(){}, paint(){}, paintTypingSoon(){}, saveSoon(){}});
   vm.runInContext(commit, ctx); ctx.commitWord();
   assert.equal(s.marks[0], typed === 'dsoy' ? 'ok' : 'bad');
   assert.equal(s.typedWords[0].raw, typed);

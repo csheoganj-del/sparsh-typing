@@ -48,14 +48,30 @@
     return rows.slice(-8).map(function (row) { return row.wpm; });
   };
 
-  /* The next five-star line. It starts at recent speed, then rises by 2 WPM
-     after a five-star history lesson, and it stops at the passage goal. */
+  /* Milliseconds to wait before the next cloud write. A paused store waits
+     for hours. A failed write waits a minute. Ordinary saves wait a minute
+     after the last success. */
+  KD.CLOUD_PAUSE_MS = 6 * 60 * 60 * 1000;
+  KD.cloudDelay = function (now, lastOk, failedAt, immediate, pausedUntil) {
+    now = Number(now) || 0;
+    lastOk = Number(lastOk) || 0;
+    failedAt = Number(failedAt) || 0;
+    pausedUntil = Number(pausedUntil) || 0;
+    if (pausedUntil > now) return pausedUntil - now;
+    if (failedAt && now - failedAt < 60000) return failedAt + 60000 - now;
+    if (lastOk && now - lastOk < 60000) return immediate ? 0 : lastOk + 60000 - now;
+    if (!lastOk && !immediate) return 1500;
+    return 0;
+  };
+
+  /* The next speed line starts at recent speed, then rises by 2 WPM after
+     a clean goal-speed run (or a legacy five-star run), up to the goal. */
   KD.starBars = function (store, base) {
     base = base || {};
     var floorMin = base.min == null ? 14 : base.min;
     var floorMid = base.mid == null ? 22 : base.mid;
     var floorHigh = base.high == null ? 32 : base.high;
-    var cap = base.cap == null ? 40 : base.cap;
+    var cap = base.cap == null ? 50 : base.cap;
     var acc = base.acc == null ? 94 : base.acc;
     function pack(high) {
       high = Math.round(high);
@@ -74,7 +90,10 @@
     for (var i = past.length - 1; i >= 0; i--) {
       if (past[i] && past[i].pattern === "history" && past[i].high) { last = past[i]; break; }
     }
-    if (last) return pack((last.stars || 0) >= 5 ? last.high + 2 : last.high);
+    if (last) {
+      var cleanGoal = Number(last.wpm) >= Number(last.high) && Number(last.acc) >= 98 && Number(last.realAcc) >= 98;
+      return pack((last.stars || 0) >= 5 || cleanGoal ? Number(last.high) + 2 : Number(last.high));
+    }
     var speeds = KD.recentSpeeds(store);
     if (!speeds.length) return { min: floorMin, mid: floorMid, high: floorHigh, acc: acc };
     var ordered = speeds.slice().sort(function (a, b) { return a - b; });
@@ -139,6 +158,30 @@
     return book;
   };
 
+  KD.livePassageSignature = function (lesson) {
+    if (!lesson || !Array.isArray(lesson.tokens) || !lesson.tokens.length) return "";
+    return JSON.stringify([lesson.pattern || "", !!lesson.wordlock, lesson.tokens.map(function (token) {
+      return [String(token && token.h || ""), String(token && token.k || "")];
+    })]);
+  };
+
+  KD.liveLessonCompleted = function (lesson, past) {
+    if (!lesson || !lesson.id) return false;
+    var signature = KD.livePassageSignature(lesson);
+    if (!signature) return false;
+    return (Array.isArray(past) ? past : []).some(function (row) {
+      if (!row || row.id !== lesson.id) return false;
+      if (row.passageSig) return row.passageSig === signature;
+      // Older saves kept only the first 24 display words, before full signatures.
+      if (Array.isArray(row.words) && row.words.length) {
+        return row.words.length <= lesson.tokens.length && row.words.every(function (word, index) {
+          return word === lesson.tokens[index].h;
+        });
+      }
+      return true;
+    });
+  };
+
   /* Union of two progress files. Stars stay at the better one. Nothing is dropped. */
   KD.mergeProgress = function (localStore, fileStore) {
     function copy(v) {
@@ -200,6 +243,29 @@
     if (KD.mergeMastery) out.mastery = KD.mergeMastery(a.mastery, b.mastery);
     if (KD.mergeProfile) out.profile = KD.mergeProfile(a.profile, b.profile);
     if (KD.mergePractice40) out.practice40 = KD.mergePractice40(a.practice40, b.practice40);
+    function trainingDate(training) {
+      var date = training && training.startDate;
+      if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return "";
+      var parsed = new Date(date + "T00:00:00Z");
+      return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date ? date : "";
+    }
+    var trainingDates = [trainingDate(a.training), trainingDate(b.training)].filter(Boolean).sort();
+    if (trainingDates.length) out.training = { startDate: trainingDates[0], goalWpm: 50, durationDays: 20 };
+    else delete out.training;
+    var drills = {};
+    [a.adaptive, b.adaptive].forEach(function (adaptive) {
+      (adaptive && Array.isArray(adaptive.drills) ? adaptive.drills : []).forEach(function (row) {
+        if (!row || !Number.isFinite(row.at) || row.at <= 0 || typeof row.signature !== "string" || !row.signature) return;
+        var key = row.at + ":" + row.signature;
+        if (!drills[key] || JSON.stringify(row) < JSON.stringify(drills[key])) drills[key] = copy(row);
+      });
+    });
+    if (a.adaptive || b.adaptive) {
+      out.adaptive = Object.assign({}, b.adaptive || {}, a.adaptive || {});
+      out.adaptive.drills = Object.keys(drills).map(function (key) { return drills[key]; }).sort(function (x, y) {
+        return x.at - y.at || x.signature.localeCompare(y.signature);
+      }).slice(-8);
+    }
     Object.keys(b.misses).forEach(function (id) {
       out.misses[id] = Math.max(out.misses[id] || 0, b.misses[id] || 0);
     });
@@ -258,10 +324,17 @@
           if (typeof w === "string" && w) repeat.push(w.slice(0, 32));
         });
       }
+      var drill = [];
+      (Array.isArray(v.drill) ? v.drill : []).forEach(function (word) {
+        if (typeof word !== "string") return;
+        word = word.trim().slice(0, 64);
+        if (word && drill.indexOf(word) < 0 && drill.length < 12) drill.push(word);
+      });
       return {
         at: v.at || 0,
         note: String(v.note).slice(0, 280),
         repeat: repeat.slice(0, 8),
+        drill: drill,
         source: v.source === "grok" || v.source === "gemini" ? v.source : "fingers"
       };
     }
@@ -269,35 +342,65 @@
     var coachB = coachOf(b.coach);
     out.coach = !coachB ? coachA : (!coachA || (coachB.at || 0) >= (coachA.at || 0) ? coachB : coachA);
     function copyLive(v) {
-      if (!v || typeof v !== "object" || !v.lesson || !Array.isArray(v.lesson.tokens) || !v.lesson.tokens.length) return null;
+      if (!v || typeof v !== "object" || Array.isArray(v)) return null;
       return JSON.parse(JSON.stringify(v));
     }
     var liveA = copyLive(a.live);
     var liveB = copyLive(b.live);
-    var live = null;
-    if (liveA && liveB) live = (liveB.past || []).length > (liveA.past || []).length ? liveB : liveA;
-    else live = liveA || liveB;
-    if (live) {
+    var live = liveA || liveB;
+    if (liveA || liveB) {
       var seenLive = {};
       var pastLive = [];
       function addPast(list) {
-        (list || []).forEach(function (row) {
-          if (!row || !row.id || seenLive[row.id]) return;
-          seenLive[row.id] = 1;
+        (Array.isArray(list) ? list : []).forEach(function (row) {
+          if (!row || !row.id) return;
+          var identity = row.id + ':' + (row.at || 0) + ':' + (row.passageSig || JSON.stringify(row.words || []));
+          if (seenLive[identity]) return;
+          seenLive[identity] = 1;
           pastLive.push(row);
         });
       }
       addPast(liveA && liveA.past);
       addPast(liveB && liveB.past);
       pastLive.sort(function (p, q) { return (p.at || 0) - (q.at || 0); });
+      function hasLesson(src) { return !!(src && KD.livePassageSignature(src.lesson)); }
+      function unfinished(src) { return hasLesson(src) && !KD.liveLessonCompleted(src.lesson, pastLive); }
+      // A cursor saved later on another device cannot reopen a finished passage.
+      var candidates = [liveA, liveB].filter(unfinished);
+      candidates.sort(function (x, y) {
+        return (Number(y.updatedAt) || 0) - (Number(x.updatedAt) || 0) ||
+          ((y.past || []).length - (x.past || []).length) ||
+          KD.livePassageSignature(x.lesson).localeCompare(KD.livePassageSignature(y.lesson)) ||
+          String(x.lesson.id || "").localeCompare(String(y.lesson.id || ""));
+      });
+      live = copyLive(candidates[0] || live);
+      if (!candidates.length && hasLesson(live)) live.lesson = null;
       live.past = pastLive.slice(-40);
+      var usage = {};
+      [liveA, liveB].forEach(function (src) {
+        Object.keys(src && src.sentenceUsage || {}).forEach(function (line) {
+          var row = src.sentenceUsage[line];
+          if (!row || typeof row !== "object") return;
+          var old = usage[line] || { count: 0, at: 0 };
+          usage[line] = { count: Math.max(old.count, Number(row.count) || 0), at: Math.max(old.at, Number(row.at) || 0) };
+        });
+      });
+      live.sentenceUsage = usage;
       var lessonId = live.lesson && live.lesson.id;
-      if (!live.resume || live.resume.id !== lessonId) live.resume = null;
+      var passageSig = KD.livePassageSignature(live.lesson);
+      var completed = KD.liveLessonCompleted(live.lesson, pastLive);
+      live.resume = null;
       function takeResume(src) {
         var r = src && src.resume;
-        if (!r || r.id !== lessonId) return;
+        if (completed || !r || r.id !== lessonId || !passageSig || KD.livePassageSignature(src.lesson) !== passageSig ||
+            (r.passageSig && r.passageSig !== passageSig)) return;
         var score = (r.i || 0) + (r.wi || 0) * 1000;
         var have = live.resume ? (live.resume.i || 0) + (live.resume.wi || 0) * 1000 : -1;
+        var saved = Number(r.savedAt) || 0, currentSaved = live.resume && Number(live.resume.savedAt) || 0;
+        if (saved || currentSaved) {
+          if (saved > currentSaved || (saved === currentSaved && score > have)) live.resume = JSON.parse(JSON.stringify(r));
+          return;
+        }
         if (score >= have) live.resume = r;
       }
       takeResume(liveA);
