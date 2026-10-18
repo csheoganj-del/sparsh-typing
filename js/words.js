@@ -754,7 +754,7 @@
       pattern: "history",
       layer: "history",
       title: "Exam sentence · " + (names[0] || "your keys") + " · " + bars.high + " WPM",
-      teach: "A Hindi sentence exercise using varied practice text, with extra attention to " + who + ". The words stay in sentence order. Unused sentences come first. Pass at " + bars.min + " WPM and " + bars.acc + "% accuracy. Practice goal: " + bars.high + " WPM with 98% first-try accuracy. Stars also account for accuracy. " +
+      teach: "An exam sentence exercise using varied practice text, with extra attention to " + who + ". The words stay in sentence order. Unused sentences come first. Pass at " + bars.min + " WPM and " + bars.acc + "% accuracy. Practice goal: " + bars.high + " WPM with 98% first-try accuracy. Stars also account for accuracy. " +
         "Completing the sentence gives you a new sentence. Reaching the goal with 98% accuracy on both measures raises the next bar by 2 WPM, up to " + cap + "." +
         " Nothing new is added while you type.",
       why: ["Hindi practice sentences with no repeats until the sentence pool is used. Practice goal: " + bars.high + " WPM with 98% first-try accuracy."],
@@ -808,5 +808,39 @@
       high: 32,
       finger: copy.finger
     };
+  };
+
+  var STOP_WORDS = { 'का':1, 'के':1, 'की':1, 'को':1, 'से':1, 'में':1, 'पर':1, 'ने':1, 'और':1, 'है':1, 'हैं':1, 'था':1, 'थी':1, 'थे':1, 'यह':1, 'वह':1, 'एक':1, 'भी':1, 'तो':1, 'ही':1, 'जो':1, 'लिए':1, 'तक':1, 'कर':1, 'दिया':1, 'गया':1, 'दिए':1, 'गई':1, 'इस':1, 'इन':1, 'उस':1, 'उन':1, 'जब':1, 'तब':1, 'अब':1, 'सब':1, 'द्वारा':1, 'तथा':1, 'एवं':1, 'अथवा':1, 'या':1, 'कुछ':1, 'फिर':1 };
+
+  KD.extractRecentWords = function (store, limit) {
+    if (!store) return [];
+    var max = limit || 35;
+    var list = [];
+    var seen = {};
+    var past = ((store.live && store.live.past) || []).slice(-10);
+    for (var i = past.length - 1; i >= 0; i--) {
+      var words = past[i].words || [];
+      for (var j = 0; j < words.length; j++) {
+        var w = String(words[j] || '').replace(/[।,!?]/g, '').trim();
+        if (w.length >= 2 && !STOP_WORDS[w] && !seen[w]) {
+          seen[w] = true;
+          list.push(w);
+          if (list.length >= max) return list;
+        }
+      }
+    }
+    var drills = ((store.adaptive && store.adaptive.drills) || []).slice(-6);
+    for (var d = drills.length - 1; d >= 0; d--) {
+      var dWords = drills[d].words || [];
+      for (var k = 0; k < dWords.length; k++) {
+        var dw = String(dWords[k] || '').replace(/[।,!?]/g, '').trim();
+        if (dw.length >= 2 && !STOP_WORDS[dw] && !seen[dw]) {
+          seen[dw] = true;
+          list.push(dw);
+          if (list.length >= max) return list;
+        }
+      }
+    }
+    return list;
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

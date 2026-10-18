@@ -401,8 +401,10 @@
     var recovery = KD.adaptiveRecovery(store);
     if (recovery) recovery.tokens.forEach(function (t) { if (t && t.h && bank.indexOf(t.h) < 0) bank.push(t.h); });
     if (lesson && !KD.courseComplete(store)) (lesson.bank || lesson.tokens || []).forEach(function (t) { if (t && t.h && bank.indexOf(t.h) < 0) bank.push(t.h); });
+    var program = KD.trainingProgram ? KD.trainingProgram(store) : null;
+    var goalWpm = (store.training && store.training.goalWpm) || (program && program.goalWpm) || 45;
     return {
-      training: { goalWpm: 50, baselineWpm: training.baselineWpm, targetWpm: training.targetWpm, firstTryAccuracy: training.firstTryAccuracy, plateau: training.plateau, baselineSource: training.baselineSource },
+      training: { goalWpm: goalWpm, baselineWpm: training.baselineWpm, targetWpm: training.targetWpm, firstTryAccuracy: training.firstTryAccuracy, plateau: training.plateau, baselineSource: training.baselineSource },
       targetKeys: training.targetKeys,
       targetPairs: training.targetPairs,
       paceMs: Math.round(board.pace || 0),
@@ -738,14 +740,15 @@
     var showLesson = lessonRun && (!last || lessonRun.at >= last.at);
     var shownWpm = showLesson ? lessonRun.wpm : (last ? last.wpm : null);
     var shownLabel = showLesson ? 'latest lesson WPM' : 'latest two-minute WPM';
-    return '<section class="practice40" aria-label="Hindi practice to 50 WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · 50 WPM</h2><p>' + esc(state.reached ? '50 WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span></div></div>' +
+    var goalWpm = program.goalWpm || 50;
+    return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span></div></div>' +
       '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Goal date: ' + esc(program.endDate) + '</p>' +
       '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
       '<div><b>2. Practise your combinations</b><p>Recent errors and slow transitions choose the drill. Words rotate as your accuracy improves.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
       '<div><b>3. Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div></div>' +
-      '<p class="small muted">' + program.today.fullChecks + ' full passage checks today · ' + program.today.recordedMinutes + ' recorded practice minutes. Goal: three fresh passage checks at 50 WPM and 98% accuracy. Lesson runs and short bursts do not replace that two-minute check.</p>' +
+      '<p class="small muted">' + program.today.fullChecks + ' full passage checks today · ' + program.today.recordedMinutes + ' recorded practice minutes. Goal: three fresh passage checks at ' + goalWpm + ' WPM and 98% accuracy. Lesson runs and short bursts do not replace that two-minute check.</p>' +
       '<details class="training-plan" open><summary>Your daily routine · about ' + program.totalMinutes + ' minutes including breaks</summary><div class="training-blocks">' + program.blocks.map(function (block) { return '<div><b>' + esc(block.title) + ' · ' + block.minutes + ' min</b><p>' + esc(block.detail) + '</p></div>'; }).join('') + '</div><p class="small muted">Take a two-minute break between blocks. You can split the blocks between morning and evening. Keep the same DevLys keyboard mapping when you switch devices.</p></details>' +
-      '<details class="training-plan"><summary>Your 20-day checkpoints</summary><p class="small muted">' + esc(program.note) + '</p><div class="training-checkpoints">' + program.milestones.map(function (m) { return '<span>Day ' + m.day + '<b>' + m.targetWpm + ' WPM</b><small>' + esc(m.date) + '</small></span>'; }).join('') + '</div><p class="small muted">Stable finger-to-key mapping, preparing the next keystroke, and small hand movements guide the technique practice. <a href="https://userinterfaces.aalto.fi/how-we-type/" target="_blank" rel="noopener">Typing research</a>. The exact daily routine is a practice plan, not a proven deadline for reaching 50 WPM.</p></details>' +
+      '<details class="training-plan"><summary>Your 20-day checkpoints</summary><p class="small muted">' + esc(program.note) + '</p><div class="training-checkpoints">' + program.milestones.map(function (m) { return '<span>Day ' + m.day + '<b>' + m.targetWpm + ' WPM</b><small>' + esc(m.date) + '</small></span>'; }).join('') + '</div><p class="small muted">Stable finger-to-key mapping, preparing the next keystroke, and small hand movements guide the technique practice. <a href="https://userinterfaces.aalto.fi/how-we-type/" target="_blank" rel="noopener">Typing research</a>. The exact daily routine is a practice plan, not a proven deadline for reaching ' + goalWpm + ' WPM.</p></details>' +
       (state.attempts.length ? '<details><summary>Recent speed checks</summary><table class="practice40-history"><thead><tr><th>Date</th><th>Practice</th><th>WPM</th><th>First try</th></tr></thead><tbody>' + state.attempts.slice(-7).reverse().map(function (r) { return '<tr><td>' + esc(new Date(r.at).toLocaleDateString('en-IN')) + '</td><td>' + (r.full ? 'Passage' : 'Familiar keys') + (r.guided ? ' · guided' : '') + '</td><td>' + fmt(r.wpm) + '</td><td>' + Math.round(r.realAcc) + '%</td></tr>'; }).join('') + '</tbody></table></details>' : '') + '</section>';
   }
   function startPractice40() {
@@ -763,11 +766,13 @@
     paintShell();
   }
   function practice40Result(r) {
+    var program = KD.trainingProgram ? KD.trainingProgram(store) : { goalWpm: 50 };
+    var targetGoal = (store.training && store.training.goalWpm) || program.goalWpm || 50;
     var timed = r.ms >= 120000;
-    var goal = timed && session.practice40.full && !session.practice40.guided && r.wpm >= 50 && r.realAcc >= 98 && r.acc >= 98;
+    var goal = timed && session.practice40.full && !session.practice40.guided && r.wpm >= targetGoal && r.realAcc >= 98 && r.acc >= 98;
     var state = KD.practice40State(store);
-    return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi · 50 WPM practice</div><h1>' + (goal ? '50 WPM with clean typing' : r.realAcc < 98 ? 'Build accuracy first' : 'Keep building your rhythm') + '</h1>' +
-      '<div class="dials">' + dialHTML('Correct key WPM', fmt(r.wpm), Math.min(100, r.wpm / 50 * 100), false) + dialHTML('First-try accuracy', Math.round(r.realAcc) + '%', r.realAcc, false) + dialHTML('Time', dur(r.ms), 0, true) + '</div>' +
+    return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi · ' + targetGoal + ' WPM practice</div><h1>' + (goal ? targetGoal + ' WPM with clean typing' : r.realAcc < 98 ? 'Build accuracy first' : 'Keep building your rhythm') + '</h1>' +
+      '<div class="dials">' + dialHTML('Correct key WPM', fmt(r.wpm), Math.min(100, r.wpm / targetGoal * 100), false) + dialHTML('First-try accuracy', Math.round(r.realAcc) + '%', r.realAcc, false) + dialHTML('Time', dur(r.ms), 0, true) + '</div>' +
       '<p>' + (session.practice40.full ? 'Fresh Hindi passage' : 'Familiar-key practice; full Hindi passage speed is not measured yet') + (session.practice40.guided ? ' · guidance used.' : '.') + '</p><p>' + (!timed ? 'Finish a full two-minute check to save a speed result.' : state.reached ? 'You have repeated the goal on three fresh passages. Keep practising new text.' : 'Repeat the goal on three fresh passages with at least 98% first-try accuracy. Correcting mistakes helps final accuracy, but does not erase first-try mistakes.') + '</p>' +
       '<div class="row-btns"><button class="btn primary" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="practice40-check">New speed check</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
   }
@@ -1132,8 +1137,21 @@
     if (!plan) (board.slowKeys || []).forEach(function (row) { if (keys.indexOf(row.id)<0 && keys.length<6) keys.push(row.id); });
     var usage = Object.assign({}, store.practice40 && store.practice40.sentenceUsage || {}, store.live.sentenceUsage || {});
     var recent = Object.keys(usage).sort(function(a,b){return usage[a].at-usage[b].at;}).slice(-96);
+    var recentWords = KD.extractRecentWords ? KD.extractRecentWords(store, 35) : [];
+    var targetPairs = plan ? plan.targetPairs.slice(0,4) : (board.slowPairs||[]).slice(0,4).map(function(r){return r.id;});
+    var program = KD.trainingProgram ? KD.trainingProgram(store) : null;
+    var goalWpm = (store.training && store.training.goalWpm) || (program && program.goalWpm) || 45;
+    var trainingData = plan ? {
+      goalWpm: goalWpm,
+      baselineWpm: plan.baselineWpm,
+      targetWpm: plan.targetWpm,
+      firstTryAccuracy: plan.firstTryAccuracy,
+      plateau: plan.plateau,
+      day: program ? program.day : 1,
+      durationDays: (store.training && store.training.durationDays) || 20
+    } : null;
     lesson.aiState = 'generating';
-    var payload = JSON.stringify({weakKeys:keys,slowPairs:plan ? plan.targetPairs.slice(0,4) : (board.slowPairs||[]).slice(0,4).map(function(r){return r.id;}),recent:recent,training:plan ? {goalWpm:50,baselineWpm:plan.baselineWpm,targetWpm:plan.targetWpm,firstTryAccuracy:plan.firstTryAccuracy,plateau:plan.plateau} : null});
+    var payload = JSON.stringify({weakKeys:keys,slowPairs:targetPairs,recent:recent,recentWords:recentWords,training:trainingData});
     function postSentences() {
       return fetch('/api/sentences',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:payload})
         .then(function(r){return r.json().catch(function(){return {};}).then(function(data){if(!r.ok){var err=Error('AI unavailable');err.reason=data&&data.reason||'';throw err;}return data;});});
@@ -1567,15 +1585,52 @@
     if (!stage) return false;
     var frame = exactNow();
     if (frame.index < 0) return false;
+    var line = stage.querySelector(".line");
+    if (!line) return false;
+    var boxes = line.querySelectorAll(".box");
+    if (boxes.length !== session.tokens.length) {
+      var top = stage.scrollTop;
+      stage.innerHTML = exactHTML();
+      stage.scrollTop = top;
+      return true;
+    }
     var current = stage.querySelector(".box.now");
     if (current && current.getAttribute("data-i") === String(frame.index) && current.querySelector(".caret")) {
       applyNowBox(current, frame);
       return true;
     }
-    if (!stage.querySelector(".line")) return false;
-    var top = stage.scrollTop;
-    stage.innerHTML = exactHTML();
-    stage.scrollTop = top;
+    var targetBox = boxes[frame.index];
+    if (!targetBox) return false;
+    var nows = line.querySelectorAll(".box.now");
+    for (var n = 0; n < nows.length; n++) {
+      var oldBox = nows[n];
+      if (oldBox !== targetBox) {
+        var oldIdx = parseInt(oldBox.getAttribute("data-i"), 10);
+        if (isNaN(oldIdx)) {
+          for (var b = 0; b < boxes.length; b++) {
+            if (boxes[b] === oldBox) { oldIdx = b; break; }
+          }
+        }
+        var oldTok = session.tokens[oldIdx];
+        var isOldLegacy = oldTok && oldTok.k != null && session.lang !== "en";
+        var oldShown = isOldLegacy ? oldTok.k : (oldTok ? (oldTok.h || "·") : "");
+        var past = true;
+        for (var s = session.i; s < session.steps.length; s++) {
+          if (session.steps[s].ti === oldIdx) { past = false; break; }
+        }
+        var state = past ? ((session.badTokens && session.badTokens[oldIdx]) ? "bad" : "done") : "ahead";
+        oldBox.className = "box " + state + (isOldLegacy ? " devlys" : "");
+        oldBox.textContent = oldShown;
+      }
+    }
+    if (!targetBox.querySelector(".caret")) {
+      var targetTok = session.tokens[frame.index];
+      var isTargetLegacy = targetTok && targetTok.k != null && session.lang !== "en";
+      var targetShown = isTargetLegacy ? targetTok.k : (targetTok ? (targetTok.h || "·") : "·");
+      targetBox.className = "box now" + (isTargetLegacy ? " devlys" : "");
+      targetBox.innerHTML = '<span class="ink">' + esc(targetShown) + '</span><span class="over" aria-hidden="true">' + esc(targetShown) + '</span><span class="caret" data-at="0"></span>';
+    }
+    applyNowBox(targetBox, frame);
     return true;
   }
   function applyLockBox(box) {
@@ -1636,8 +1691,9 @@
           var mark = "";
           if (i === session.wi) mark = "now";
           else if (!exam && i < session.wi) mark = session.marks[i] === "ok" ? "ok" : "bad";
-          words[i].classList.remove("now", "ok", "bad");
-          if (mark) words[i].classList.add(mark);
+          var curCls = words[i].className;
+          var newCls = "word" + (mark ? " " + mark : "") + (session.lang === 'en' ? '' : ' devlys');
+          if (curCls !== newCls) words[i].className = newCls;
         }
       }
     } else if (now.textContent !== (session.typed || "")) now.textContent = session.typed || "";
@@ -1651,16 +1707,46 @@
     var line = stage.querySelector(".line");
     if (!line) return false;
     var boxes = line.querySelectorAll(".box");
+    if (boxes.length !== session.words.length) {
+      var top = stage.scrollTop;
+      stage.innerHTML = lockHTML();
+      stage.scrollTop = top;
+      return true;
+    }
     var box = boxes[session.wi];
+    if (!box) return false;
     var nows = line.querySelectorAll(".box.now");
-    if (box && boxes.length === session.words.length && nows.length === 1 && nows[0] === box && box.querySelector(".caret")) {
+    if (nows.length === 1 && nows[0] === box && box.querySelector(".caret")) {
       applyLockBox(box);
       syncFix();
       return true;
     }
-    var top = stage.scrollTop;
-    stage.innerHTML = lockHTML();
-    stage.scrollTop = top;
+    for (var n = 0; n < nows.length; n++) {
+      var oldBox = nows[n];
+      if (oldBox !== box) {
+        var oldWi = -1;
+        for (var b = 0; b < boxes.length; b++) {
+          if (boxes[b] === oldBox) { oldWi = b; break; }
+        }
+        if (oldWi >= 0) {
+          var mark = oldWi < session.wi ? (session.marks[oldWi] === "ok" ? "done" : "bad") : "ahead";
+          var oldW = session.words[oldWi];
+          var oldLegacy = oldW && oldW.k != null && session.lang !== "en";
+          var oldShown = oldLegacy ? oldW.k : (oldW ? oldW.h : "");
+          oldBox.className = "box " + mark + (oldLegacy ? " devlys" : "");
+          oldBox.textContent = oldShown;
+        }
+      }
+    }
+    if (!box.querySelector(".caret")) {
+      var curW = session.words[session.wi];
+      var curLegacy = curW && curW.k != null && session.lang !== "en";
+      var curShown = curLegacy ? curW.k : (curW ? curW.h : "");
+      box.className = "box now" + (curLegacy ? " devlys" : "");
+      box.innerHTML = '<span class="ink">' + esc(curShown) + '</span><span class="over" aria-hidden="true">' + esc(curShown) + '</span><span class="caret" data-at="0"></span>';
+    }
+    applyLockBox(box);
+    syncFix();
     return true;
   }
   function paintKeyFace(el, showShift) {
@@ -1734,12 +1820,46 @@
     var node = document.querySelector(selector);
     var stage = document.querySelector("#run .stage");
     if (!html) { if (node) node.remove(); return; }
+    if (node && node.getAttribute("data-stamp") === html) return;
     var wrap = document.createElement("div");
     wrap.innerHTML = html;
     var fresh = wrap.firstElementChild;
     if (!fresh) return;
+    fresh.setAttribute("data-stamp", html);
     if (node) node.replaceWith(fresh);
     else if (stage) stage.insertAdjacentElement(where, fresh);
+  }
+  function syncTeachingSequence(next) {
+    if (!session || !session.lesson || ['introduction', 'combination', 'recovery', 'review'].indexOf(session.lesson.stage) < 0) {
+      var oldSeq = document.querySelector("#run .teaching-sequence");
+      if (oldSeq) oldSeq.remove();
+      return;
+    }
+    var seqEl = document.querySelector("#run .teaching-sequence");
+    if (!seqEl) {
+      replaceRunChunk("#run .teaching-sequence", teachingSequenceHTML(next), "beforebegin");
+      return;
+    }
+    if (!next || next.space) {
+      if (!seqEl.classList.contains("sequence-placeholder")) {
+        seqEl.className = "teaching-sequence sequence-placeholder";
+        seqEl.setAttribute("aria-hidden", "true");
+        seqEl.innerHTML = "";
+      }
+      return;
+    }
+    var token = session.tokens[next.ti];
+    if (!token) return;
+    var current = session.steps.slice(0, session.i).filter(function (step) { return step.ti === next.ti; }).length;
+    var hEl = seqEl.querySelector(".h");
+    if (hEl && hEl.textContent === token.k && !seqEl.classList.contains("sequence-placeholder")) {
+      var kbds = seqEl.querySelectorAll(".sequence-keys kbd");
+      for (var k = 0; k < kbds.length; k++) {
+        kbds[k].classList.toggle("current", k === current);
+      }
+    } else {
+      replaceRunChunk("#run .teaching-sequence", teachingSequenceHTML(next), "beforebegin");
+    }
   }
   function syncProgress() {
     var fill = document.querySelector("#run .tc-progress-fill");
@@ -1782,23 +1902,16 @@
       replaceRunChunk("#run .tc-hint-card", hintKeyPromptHTML(next), "afterend");
     }
     if (session.lesson && ["introduction", "combination", "recovery", "review"].indexOf(session.lesson.stage) >= 0) {
-      replaceRunChunk("#run .teaching-sequence", teachingSequenceHTML(next), "beforebegin");
+      syncTeachingSequence(next);
     }
     syncProgress();
     revealCurrent();
     placeCaret();
   }
-  /* Keys are processed at once, in order. Their drawing is batched into the
-     next animation frame, so a burst of keys costs one repaint, not one each. */
+  /* Typing feedback is synchronous for instantaneous screen updates. */
   var typingFrame = 0;
   function paintTypingSoon() {
-    if (typingFrame) return;
-    var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
-    typingFrame = raf(function () {
-      typingFrame = 0;
-      if (!session || screen !== "run" || session.phase !== "run") return;
-      paintTyping();
-    });
+    paintTyping();
   }
   function paintClock() {
     if (!session || session.phase !== "run" || session.paused) return;
@@ -1924,6 +2037,16 @@
       '<span class="caret" data-at="' + at + '"></span></span>';
   }
   var caretWidths = {}, caretWidthCount = 0;
+  var caretProbe = null;
+  function getCaretProbe() {
+    if (!caretProbe) {
+      caretProbe = document.createElement("span");
+      caretProbe.setAttribute("aria-hidden", "true");
+      caretProbe.style.cssText = "position:fixed;visibility:hidden;white-space:nowrap;left:-9999px;top:-9999px;pointer-events:none;";
+      (document.body || document.documentElement).appendChild(caretProbe);
+    }
+    return caretProbe;
+  }
   function placeCaret() {
     var box = document.querySelector(".box.now");
     if (!box) return;
@@ -1936,22 +2059,17 @@
     var at = parseInt(caret.getAttribute("data-at"), 10);
     if (isNaN(at) || at < 0) at = 0;
     if (at > text.length) at = text.length;
-    /* A DOM range returns the whole Devanagari cluster, so ी is measured
-       as the extra width of the typed prefix instead of as its own box. */
-    var probe = document.createElement("span");
-    probe.setAttribute("aria-hidden", "true");
-    probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;left:0;top:0;pointer-events:none;";
-    /* Each probe measurement forces a full layout. Prefix widths never change
-       for a given font and size, so remember them once the fonts are loaded. */
     var canCache = !document.body.classList.contains("devlys-loading") && (!document.fonts || document.fonts.status === "loaded");
     var cacheKey = drillSize() + "|" + (box.classList.contains("devlys") ? "d" : "") + "|" + (box.parentNode ? box.parentNode.className : "") + "|";
     function widthOf(s) {
       s = s || "";
       var key = cacheKey + s;
       if (canCache && Object.prototype.hasOwnProperty.call(caretWidths, key)) return caretWidths[key];
-      if (!probe.parentNode) box.appendChild(probe);
+      var probe = getCaretProbe();
+      probe.className = (box.classList.contains("devlys") ? "devlys " : "") + (box.parentNode ? box.parentNode.className : "");
+      probe.style.fontSize = drillSize() + "px";
       probe.textContent = s;
-      var w = probe.getBoundingClientRect().width;
+      var w = probe.offsetWidth || probe.getBoundingClientRect().width;
       if (canCache) {
         if (++caretWidthCount > 4000) { caretWidths = {}; caretWidthCount = 0; }
         caretWidths[key] = w;
@@ -1964,10 +2082,10 @@
         (cp >= 0x093e && cp <= 0x094d) || (cp >= 0x0951 && cp <= 0x0957) ||
         cp === 0x0962 || cp === 0x0963;
     }
-    var inkRect = ink.getBoundingClientRect();
-    var origin = inkRect.left - box.getBoundingClientRect().left;
+    var origin = ink.offsetLeft;
+    var inkWidth = ink.offsetWidth;
     var fullW = widthOf(text);
-    var scale = fullW > 0.5 ? inkRect.width / fullW : 1;
+    var scale = fullW > 0.5 ? inkWidth / fullW : 1;
     var green = 0;
     var left = 0;
     var width = 12;
@@ -1995,12 +2113,15 @@
       }
     }
     if (over && at < text.length) {
-      over.style.left = origin + "px";
-      over.style.width = Math.max(0, green * scale) + "px";
+      var curOverLeft = origin + "px";
+      var curOverWidth = Math.max(0, green * scale) + "px";
+      if (over.style.left !== curOverLeft) over.style.left = curOverLeft;
+      if (over.style.width !== curOverWidth) over.style.width = curOverWidth;
     }
-    caret.style.left = Math.max(0, origin + left * scale) + "px";
-    caret.style.width = Math.max(4, width * scale) + "px";
-    if (probe.parentNode) probe.remove();
+    var curCaretLeft = Math.max(0, origin + left * scale) + "px";
+    var curCaretWidth = Math.max(4, width * scale) + "px";
+    if (caret.style.left !== curCaretLeft) caret.style.left = curCaretLeft;
+    if (caret.style.width !== curCaretWidth) caret.style.width = curCaretWidth;
   }
   function exactHTML() {
     var stepAt = session.steps[session.i];
@@ -2204,7 +2325,7 @@
     armFlash();
     saveSoon();
     if (!holdPaint) {
-      paintTypingSoon();
+      paintTyping();
       beepLater(false);
     }
   }
@@ -2227,7 +2348,7 @@
       finish();
       return;
     }
-    paintTypingSoon();
+    paintTyping();
     beepLater(true);
     if (session.live) saveSoon();
   }
@@ -2388,7 +2509,7 @@
         recordPosition(step, false, true);
         session.i--;
         refreshTokenErrors(session.steps[session.i].ti);
-        forgetTiming(); paintTypingSoon();
+        forgetTiming(); paintTyping();
       }
       return;
     }
@@ -2410,7 +2531,7 @@
         session.i++;
         beepLater(false);
         if (session.i >= session.steps.length) finish();
-        else { paintTypingSoon(); if (session.live) saveSoon(); }
+        else { paintTyping(); if (session.live) saveSoon(); }
       }
     }
   }
@@ -2432,7 +2553,7 @@
       e.preventDefault();
       if (session.typed.length) session.typed = session.typed.slice(0, -1);
       forgetTiming();
-      paintTypingSoon();
+      paintTyping();
       return;
     }
     if (e.code === "Space" || e.key === " " || e.code === "Enter" || e.key === "Enter") {
@@ -2452,7 +2573,7 @@
       correctStep.ti = session.wi;
       recordSkill(correctStep, true);
       rememberTap(correctStep);
-      beep(true);
+      beepLater(true);
     } else {
       if (expect && ch !== expect) {
         var st = KD.stepsFromKruti(expect)[0];
@@ -2465,15 +2586,15 @@
         session.wordMistakes = session.wordMistakes || {};
         session.wordMistakes[session.wi] = true;
         session.errors++;
-        beep(false);
+        beepLater(false);
         armFlash();
-      } else beep(true);
+      } else beepLater(true);
       forgetTiming();
     }
     session.typed += ch;
     if (session.typed.length > 48) session.typed = session.typed.slice(0, 48);
     // Only the current word changes; do not rebuild the passage and keyboard.
-    paintTypingSoon();
+    paintTyping();
   }
 
   document.addEventListener("keyup", function (e) {
@@ -2517,10 +2638,12 @@
     }
     if (!ok) {
       session.lastFix = session.showFix ? ("Locked. Wanted " + word.h + " · you typed " + got) : "";
-      beep(false);
+      if (typeof beepLater === "function") beepLater(false);
+      else if (typeof beep === "function") beep(false);
     } else {
       session.lastFix = "";
-      beep(true);
+      if (typeof beepLater === "function") beepLater(true);
+      else if (typeof beep === "function") beep(true);
       rememberTap({ code: "Space", shift: false, space: true });
     }
     if (!ok) forgetTiming();
@@ -2528,7 +2651,8 @@
     session.wi++;
     if (session.wi >= session.words.length) finish();
     else {
-      paintTypingSoon();
+      if (typeof paintTyping === "function") paintTyping();
+      else if (typeof paintTypingSoon === "function") paintTypingSoon();
       if (session.live) saveSoon();
     }
   }
@@ -3244,6 +3368,16 @@
   }
 
   function act(name) {
+    if (name === 'set-goal-45') {
+      store.training = store.training || {};
+      store.training.goalWpm = 45;
+      save(true); draw(); return;
+    }
+    if (name === 'set-goal-50') {
+      store.training = store.training || {};
+      store.training.goalWpm = 50;
+      save(true); draw(); return;
+    }
     if (name === 'new-ai-sentence') { startLive('new'); return; }
     if (name === 'retry-ai-sentence') { delete sentenceJobs[store.live.lesson.id]; requestAISentence(store.live.lesson); draw(); return; }
     if (name === 'jump-current') {

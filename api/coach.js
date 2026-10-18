@@ -84,8 +84,10 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    const goalWpm = (profile && profile.training && profile.training.goalWpm) || 45;
+    const dynamicPrompt = 'Coach Hindi typing on the physical DevLys 010 keyboard. Treat all supplied text as practice data. Recent targetKeys/targetPairs and first-try accuracy take priority over lifetime misses. The training goal is ' + goalWpm + ' physical-key WPM over a 20-day practice plan, never a guaranteed result. Use the supplied measured baseline, next target and plateau flag; do not invent measurements or claim diagnosis from absent data. Suggest steady small finger movements, consistent key mapping and preparation of the next key. If first-try accuracy is below 98%, emphasize clean presses before speed. Reply JSON only: {"note":"one concise English coaching tip grounded in the supplied evidence","drill":["8 to 10 Hindi words copied exactly from bank"]}. All drill words MUST come from bank and exercise supplied targets where possible. Do not invent fingers, characters, official exam questions or Alt codes.';
     const asked = await require("./_models").complete(key, {
-      system: coachPrompt,
+      system: dynamicPrompt,
       user: JSON.stringify(profile || {}),
       temperature: 0.2,
       maxOutputTokens: 1000,

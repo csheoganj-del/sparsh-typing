@@ -204,6 +204,12 @@
       if (drill && drill.signature) signatures[drill.signature] = true;
       ((drill || {}).words || []).forEach(function (word) { prior[word] = (prior[word] || 0) + 1; });
     });
+    ((store.live || {}).past || []).slice(-8).forEach(function (row) {
+      ((row || {}).words || []).forEach(function (word) {
+        var clean = String(word || '').replace(/[।,!?]/g, '').trim();
+        if (clean) prior[clean] = (prior[clean] || 0) + 1;
+      });
+    });
     var fragments = false;
     if (!bank.length) {
       fragments = true;
@@ -232,11 +238,11 @@
         var alternative = choices.filter(function (token) { return token.k !== previous; });
         if (alternative.length) choices = alternative;
         choices = choices.map(function (token, index) { return { token: token, index: index,
-          cost: (prior[token.h] || 0) * 3 + (used[token.k] || 0) * 8 + Math.max(0, actions(token).length - 12) +
+          cost: (prior[token.h] || 0) * 4 + (used[token.k] || 0) * 8 + Math.max(0, actions(token).length - 12) +
             (data.suggested[token.k] ? -1 : 0) }; });
         choices.sort(function (a, b) { return a.cost - b.cost || a.index - b.index; });
         var bestCost = choices[0].cost;
-        var varied = choices.filter(function (choice) { return choice.cost <= bestCost + 1; }).slice(0, 6);
+        var varied = choices.filter(function (choice) { return choice.cost <= bestCost + 2; }).slice(0, 16);
         var pick = (Math.floor(rng() * varied.length) + offset + i) % varied.length;
         var token = varied[pick].token;
         tokens.push({ h: token.h, k: token.k }); used[token.k] = (used[token.k] || 0) + 1;

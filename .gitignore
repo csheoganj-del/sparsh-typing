@@ -10,3 +10,6 @@ coach.key
 
 .env*
 progress/user-*.json
+.agents/
+.claude/
+artifacts/
