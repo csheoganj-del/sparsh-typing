@@ -165,8 +165,32 @@ var server = http.createServer(function (req, res) {
     return authHandler(req, res);
   }
   if (url === "/api/progress") {
-    var progressHandler = require("./api/progress");
-    return progressHandler(req, res);
+    if (req.headers.authorization) {
+      var progressHandler = require("./api/progress");
+      return progressHandler(req, res);
+    }
+    if (req.method === "GET") {
+      try {
+        var data = fs.readFileSync(progressPath, "utf8");
+        return send(res, 200, data, "application/json; charset=utf-8");
+      } catch (e) {
+        return send(res, 200, "{}", "application/json; charset=utf-8");
+      }
+    }
+    if (req.method === "POST") {
+      var chunks = [];
+      req.on("data", function (c) { chunks.push(c); });
+      req.on("end", function () {
+        var body = Buffer.concat(chunks).toString("utf8");
+        try {
+          replaceProgress(body);
+          send(res, 200, '{"ok":true}', "application/json; charset=utf-8");
+        } catch (err) {
+          send(res, 500, '{"error":"save failed"}', "application/json; charset=utf-8");
+        }
+      });
+      return;
+    }
   }
   if (url === "/api/coach") {
     var coachHandler = require("./api/coach");

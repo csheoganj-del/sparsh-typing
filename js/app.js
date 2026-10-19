@@ -736,10 +736,10 @@
     var learn = offer
       ? 'Use new Hindi sentences to carry your combinations into normal reading. Your next practice pace is ' + program.nextTargetWpm + ' WPM with 98% first-try accuracy.'
       : 'Continue the course. Learn one key, then combinations and words.';
+    var cumulative = KD.cumulativeSpeed ? KD.cumulativeSpeed(store) : null;
     var lessonRun = KD.latestLessonRun(store);
-    var showLesson = lessonRun && (!last || lessonRun.at >= last.at);
-    var shownWpm = showLesson ? lessonRun.wpm : (last ? last.wpm : null);
-    var shownLabel = showLesson ? 'latest lesson WPM' : 'latest two-minute WPM';
+    var shownWpm = cumulative != null ? cumulative : (lessonRun ? lessonRun.wpm : (last ? last.wpm : null));
+    var shownLabel = 'cumulative WPM';
     var goalWpm = program.goalWpm || 50;
     return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span></div></div>' +
       '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Goal date: ' + esc(program.endDate) + '</p>' +
@@ -1576,6 +1576,9 @@
     if (box.className !== cls) box.className = cls;
     var caret = box.querySelector(".caret");
     if (caret && caret.getAttribute("data-at") !== String(at)) caret.setAttribute("data-at", String(at));
+    var over = box.querySelector(".over");
+    var typedText = at > 0 ? String(shown).slice(0, at) : "";
+    if (over && over.textContent !== typedText) over.textContent = typedText;
     var waitEl = box.querySelector(".wait");
     if (wait && !waitEl) box.insertAdjacentHTML("afterbegin", '<span class="wait">मात्रा</span>');
     else if (!wait && waitEl) waitEl.remove();
@@ -1628,7 +1631,7 @@
       var isTargetLegacy = targetTok && targetTok.k != null && session.lang !== "en";
       var targetShown = isTargetLegacy ? targetTok.k : (targetTok ? (targetTok.h || "·") : "·");
       targetBox.className = "box now" + (isTargetLegacy ? " devlys" : "");
-      targetBox.innerHTML = '<span class="ink">' + esc(targetShown) + '</span><span class="over" aria-hidden="true">' + esc(targetShown) + '</span><span class="caret" data-at="0"></span>';
+      targetBox.innerHTML = '<span class="ink">' + esc(targetShown) + '</span><span class="over" aria-hidden="true"></span><span class="caret" data-at="0"></span>';
     }
     applyNowBox(targetBox, frame);
     return true;
@@ -1658,6 +1661,9 @@
     if (box.className !== cls) box.className = cls;
     var caret = box.querySelector(".caret");
     if (caret && caret.getAttribute("data-at") !== String(at)) caret.setAttribute("data-at", String(at));
+    var over = box.querySelector(".over");
+    var typedText = at > 0 ? String(shown).slice(0, at) : "";
+    if (over && over.textContent !== typedText) over.textContent = typedText;
     var waitEl = box.querySelector(".wait");
     if (wait && !waitEl) box.insertAdjacentHTML("afterbegin", '<span class="wait">मात्रा</span>');
     else if (!wait && waitEl) waitEl.remove();
@@ -2030,10 +2036,11 @@
     if (formed && target.indexOf(formed) === 0) at = formed.length;
     if (at === (target || "").length && at > 0) cls += " typed";
     var pill = wait ? '<span class="wait">मात्रा</span>' : "";
+    var typedText = at > 0 ? String(target).slice(0, at) : "";
     return '<span class="' + cls + '"' + a11y + '>' +
       pill +
       '<span class="ink">' + esc(target) + "</span>" +
-      '<span class="over" aria-hidden="true">' + esc(target) + "</span>" +
+      '<span class="over" aria-hidden="true">' + esc(typedText) + "</span>" +
       '<span class="caret" data-at="' + at + '"></span></span>';
   }
   var caretWidths = {}, caretWidthCount = 0;
@@ -2076,8 +2083,14 @@
       }
       return w;
     }
+    function isDevlysMark(ch) {
+      return "fkhsSa¡qw`zZW+%".indexOf(ch) >= 0;
+    }
     function isMark(i) {
+      if (i < 0 || i >= text.length) return false;
+      var ch = text.charAt(i);
       var cp = text.charCodeAt(i);
+      if (box.classList.contains("devlys") && isDevlysMark(ch)) return true;
       return (cp >= 0x0900 && cp <= 0x0903) || cp === 0x093c ||
         (cp >= 0x093e && cp <= 0x094d) || (cp >= 0x0951 && cp <= 0x0957) ||
         cp === 0x0962 || cp === 0x0963;
@@ -2098,12 +2111,12 @@
       var nextW = widthOf(text.slice(0, at + 1));
       var grow = nextW - prevW;
       var cp = text.charCodeAt(at);
-      var prebase = cp === 0x093f || cp === 0x094e;
+      var prebase = cp === 0x093f || cp === 0x094e || (box.classList.contains("devlys") && text.charAt(at) === "f");
       if (prebase || (grow < 1.5 && isMark(at))) {
         var syl = at;
         while (syl > 0 && isMark(syl - 1)) syl--;
         var before = widthOf(text.slice(0, syl));
-        green = before;
+        green = prevW;
         left = before;
         width = prebase ? Math.max(grow, 6) : Math.max(prevW - before, 8);
       } else {
@@ -2112,11 +2125,15 @@
         width = Math.max(grow, 4);
       }
     }
-    if (over && at < text.length) {
-      var curOverLeft = origin + "px";
-      var curOverWidth = Math.max(0, green * scale) + "px";
-      if (over.style.left !== curOverLeft) over.style.left = curOverLeft;
-      if (over.style.width !== curOverWidth) over.style.width = curOverWidth;
+    var typedText = at > 0 ? text.slice(0, at) : "";
+    if (over) {
+      if (over.textContent !== typedText) over.textContent = typedText;
+      if (at < text.length) {
+        var curOverLeft = origin + "px";
+        var curOverWidth = Math.max(0, green * scale) + "px";
+        if (over.style.left !== curOverLeft) over.style.left = curOverLeft;
+        if (over.style.width !== curOverWidth) over.style.width = curOverWidth;
+      }
     }
     var curCaretLeft = Math.max(0, origin + left * scale) + "px";
     var curCaretWidth = Math.max(4, width * scale) + "px";

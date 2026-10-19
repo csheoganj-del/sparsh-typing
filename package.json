@@ -4,7 +4,7 @@
   "description": "TypingClub-style Hindi (Kruti Dev / DevLys 010) touch typing tutor for RSSB LDC (Clerk Grade-II) direct recruitment exam with AI weakness coach and cloud sync.",
   "scripts": {
     "start": "node local-server.js",
-    "test": "node js/selftest.js && node scripts/test-teaching.cjs && node scripts/test-learning-model.cjs && node scripts/test-preview-storage.cjs && node scripts/test-practice.cjs && node scripts/test-cloud.cjs && node scripts/test-turso.cjs && node scripts/test-supabase.cjs && node scripts/test-devlys.cjs && node scripts/test-course-text.cjs && node scripts/test-live-sentences.cjs && node scripts/test-ai-sentences.cjs && node scripts/test-cross-device.cjs && node scripts/test-adaptive.cjs && node scripts/test-training-flow.cjs && node scripts/test-smart-ai.cjs",
+    "test": "node js/selftest.js && node scripts/test-teaching.cjs && node scripts/test-learning-model.cjs && node scripts/test-preview-storage.cjs && node scripts/test-practice.cjs && node scripts/test-cloud.cjs && node scripts/test-turso.cjs && node scripts/test-supabase.cjs && node scripts/test-devlys.cjs && node scripts/test-course-text.cjs && node scripts/test-live-sentences.cjs && node scripts/test-ai-sentences.cjs && node scripts/test-cross-device.cjs && node scripts/test-adaptive.cjs && node scripts/test-training-flow.cjs && node scripts/test-smart-ai.cjs && node scripts/test-matra-cumulative.cjs",
     "test:preview": "node scripts/test-preview-storage.cjs",
     "test:teaching": "node scripts/test-teaching.cjs",
     "test:learning": "node scripts/test-learning-model.cjs"

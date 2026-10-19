@@ -48,6 +48,54 @@
     return rows.slice(-8).map(function (row) { return row.wpm; });
   };
 
+  /* Cumulative speed across all completed typing runs.
+     Calculates total words divided by total minutes across attempts so the
+     speed reflects cumulative learning and updates with every practice. */
+  KD.cumulativeSpeed = function (store) {
+    if (!store) return null;
+    var seen = {};
+    var rows = [];
+    function add(row, id) {
+      if (!row || typeof row !== "object" || !row.at) return;
+      var wpm = Number(row.wpm);
+      if (!(wpm > 0)) return;
+      if (row.scoreFree || row.guided) return;
+      var lessonId = id || row.id || "";
+      if (/^repair-/.test(lessonId)) return;
+      if (seen[row.at]) return;
+      seen[row.at] = 1;
+      rows.push(row);
+    }
+    (store.log || []).forEach(function (r) { add(r, r && r.id); });
+    var past = store.live && Array.isArray(store.live.past) ? store.live.past : [];
+    past.forEach(function (r) { add(r, r && r.id); });
+    var checks = store.practice40 && Array.isArray(store.practice40.attempts) ? store.practice40.attempts : [];
+    checks.forEach(function (r) { add(r, "practice40"); });
+    var tries = store.tries || {};
+    Object.keys(tries).forEach(function (id) {
+      (tries[id] || []).forEach(function (r) { add(r, id); });
+    });
+    if (!rows.length) return null;
+    var totalWords = 0;
+    var totalMinutes = 0;
+    var wpmSum = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var wpm = Number(r.wpm);
+      var ms = Number(r.ms);
+      wpmSum += wpm;
+      if (ms > 0) {
+        var mins = ms / 60000;
+        totalMinutes += mins;
+        totalWords += wpm * mins;
+      }
+    }
+    if (totalMinutes > 0 && totalWords > 0) {
+      return Math.round((totalWords / totalMinutes) * 10) / 10;
+    }
+    return Math.round((wpmSum / rows.length) * 10) / 10;
+  };
+
   /* Milliseconds to wait before the next cloud write. A paused store waits
      for hours. A failed write waits a minute. Ordinary saves wait a minute
      after the last success. */
