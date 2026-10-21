@@ -1295,9 +1295,10 @@
   }
 
   function startLock(opts) {
+    var isExam = !!opts.exam;
     session = {
       kind: "lock",
-      phase: "intro",
+      phase: isExam ? "run" : "intro",
       lesson: {
         id: opts.id,
         title: opts.title,
@@ -1340,6 +1341,7 @@
     };
     screen = "run";
     paintShell();
+    if (isExam) ensureTick();
   }
 
   function drillSize() {
@@ -2486,11 +2488,19 @@
         beginRun();
         return;
       }
-      var step0 = currentStep();
+      if (!e.altKey && !e.ctrlKey && !e.metaKey && e.key && (e.key.length === 1 || (e.code && (e.code.indexOf("Key") === 0 || e.code.indexOf("Digit") === 0 || e.code === "Semicolon" || e.code === "Quote" || e.code === "Comma" || e.code === "Period" || e.code === "Slash" || e.code === "BracketLeft" || e.code === "BracketRight" || e.code === "Backslash" || e.code === "Minus" || e.code === "Equal")))) {
+        e.preventDefault();
+        beginRun();
+        if (session.kind === "exact") exactKey(e);
+        else lockKey(e);
+        return;
+      }
+      var step0 = currentStep() || nextLockStep();
       if (step0 && e.code === step0.code && !e.altKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         beginRun();
         if (session.kind === "exact") exactKey(e);
+        else lockKey(e);
         return;
       }
       return;
