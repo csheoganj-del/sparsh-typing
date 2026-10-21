@@ -290,3 +290,227 @@ body.fit .bump-dot { background: currentColor; width: 10px; height: 2px; }
 /* Typing latency: no animated repaint on every key, and keep stage layout local. */
 body.fit .tc-progress-fill { transition: none; }
 body.fit .stage { contain: layout paint; }
+
+/* ========================================================
+   RSSB EXAM & MOCK MODE: STRICT SPLIT-PANE VIEWPORT LAYOUT
+   Both Master Passage and Candidate Typing Area must remain
+   simultaneously 100% visible on screen without page scroll.
+   ======================================================== */
+body.fit.exam-mode,
+body.fit.mock-mode {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #f8fafc !important;
+}
+
+body.fit.exam-mode #app,
+body.fit.mock-mode #app {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+body.fit.exam-mode .practice-bar,
+body.fit.mock-mode .practice-bar {
+  flex: none !important;
+  height: 40px !important;
+  z-index: 20;
+}
+
+body.fit.exam-mode .wrap.practice-wrap,
+body.fit.mock-mode .wrap.practice-wrap {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: calc(100vh - 40px) !important;
+  width: min(1200px, calc(100% - 24px)) !important;
+  padding: 6px 0 10px !important;
+  margin: 0 auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+body.fit.exam-mode #run,
+body.fit.mock-mode #run {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+body.fit.exam-mode .tc-progress-wrap,
+body.fit.mock-mode .tc-progress-wrap {
+  margin: 0 0 6px 0 !important;
+  flex: none !important;
+}
+
+body.fit.exam-mode .run-top,
+body.fit.mock-mode .run-top {
+  order: 0 !important;
+  margin: 0 0 8px 0 !important;
+  flex: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+body.fit.exam-mode .run-top .kicker,
+body.fit.mock-mode .run-top .kicker {
+  display: block !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+
+body.fit.exam-mode .stage,
+body.fit.mock-mode .stage {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: 100% !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  box-shadow: none !important;
+  contain: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+body.fit.exam-mode .keyboard-guide,
+body.fit.exam-mode .tc-hint-card,
+body.fit.exam-mode .tc-hands-wrapper {
+  display: none !important;
+}
+
+/* Split container for Master and Type panes */
+body.fit.exam-mode .mock,
+body.fit.mock-mode .mock {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  display: grid !important;
+  grid-template-rows: 1fr 1fr !important;
+  gap: 10px !important;
+}
+
+body.fit.exam-mode .mock-pane,
+body.fit.mock-mode .mock-pane {
+  min-height: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  padding: 8px 14px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  overflow: hidden !important;
+}
+
+body.fit.exam-mode .mock-pane.mock-master,
+body.fit.mock-mode .mock-pane.mock-master {
+  border-color: #cbd5e1 !important;
+  background: #fafbfc !important;
+}
+
+body.fit.exam-mode .mock-pane.mock-type,
+body.fit.mock-mode .mock-pane.mock-type {
+  border-color: #3b82f6 !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 1px #3b82f6 !important;
+}
+
+body.fit.exam-mode .mock-k,
+body.fit.mock-mode .mock-k {
+  flex: none !important;
+  font-size: 11px !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  color: #475569 !important;
+  font-weight: 700 !important;
+  margin-bottom: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  padding-bottom: 4px !important;
+}
+
+body.fit.exam-mode .mock-count,
+body.fit.mock-mode .mock-count {
+  font-size: 11px !important;
+  color: #64748b !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+}
+
+body.fit.exam-mode .mock-pane .passage,
+body.fit.exam-mode .mock-pane .typed-line,
+body.fit.mock-mode .mock-pane .passage,
+body.fit.mock-mode .mock-pane .typed-line {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  font-family: var(--hindi) !important;
+  font-size: var(--drill, 24px) !important;
+  line-height: 1.65 !important;
+  padding-right: 6px !important;
+  word-break: break-word !important;
+  scroll-behavior: smooth;
+}
+
+body.fit.exam-mode .mock-pane .passage.en,
+body.fit.exam-mode .mock-pane .typed-line.en,
+body.fit.mock-mode .mock-pane .passage.en,
+body.fit.mock-mode .mock-pane .typed-line.en {
+  font-family: var(--serif) !important;
+  font-size: 21px !important;
+}
+
+.typed-line .word.now {
+  background: #fef08a !important;
+  outline: 2px solid #eab308 !important;
+  border-radius: 3px !important;
+}
+
+.typed-line .word.now::after {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: #2563eb;
+  vertical-align: -2px;
+  margin-left: 3px;
+  animation: caret 0.9s infinite;
+}
+
+.mock-pane .passage::-webkit-scrollbar,
+.mock-pane .typed-line::-webkit-scrollbar {
+  width: 8px;
+}
+.mock-pane .passage::-webkit-scrollbar-track,
+.mock-pane .typed-line::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.mock-pane .passage::-webkit-scrollbar-thumb,
+.mock-pane .typed-line::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.mock-pane .passage::-webkit-scrollbar-thumb:hover,
+.mock-pane .typed-line::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

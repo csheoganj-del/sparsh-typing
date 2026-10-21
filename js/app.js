@@ -600,6 +600,10 @@
   function draw() {
     document.body.classList.toggle("fit", screen === "run");
     document.body.classList.toggle("course-map", screen === "home" || screen === "path");
+    if (screen !== "run") {
+      document.body.classList.remove("exam-mode");
+      document.body.classList.remove("mock-mode");
+    }
     if (screen === "home") app.innerHTML = bar() + homeHTML();
     else if (screen === "path") app.innerHTML = bar() + pathHTML();
     else if (screen === "record") app.innerHTML = bar() + recordHTML();
@@ -1347,7 +1351,9 @@
     if (!session) return;
     document.body.classList.add("fit");
     document.body.classList.remove("course-map");
-    app.innerHTML = '<header class="practice-bar"><button class="icon-button" ' + (session.practice40 ? 'data-go="home" aria-label="Leave speed check" title="Leave speed check"' : 'data-act="lesson-menu" aria-label="Lesson menu" title="Lesson menu (Esc)"') + '>' + icon('menu') + '</button>' +
+    document.body.classList.toggle("exam-mode", !!session.exam);
+    document.body.classList.toggle("mock-mode", !!(session.exam || (session.lesson && session.lesson.stage === "para")));
+    app.innerHTML = '<header class="practice-bar"><button class="icon-button" ' + ((session.practice40 || session.exam) ? 'data-go="home" aria-label="Leave exam" title="Leave exam"' : 'data-act="lesson-menu" aria-label="Lesson menu" title="Lesson menu (Esc)"') + '>' + icon('menu') + '</button>' +
       '<span class="practice-title">' + (session.index >= 0 ? 'Lesson ' + (session.index + 1) + ' · ' : '') + esc(session.lesson.title) + '</span>' +
       '<div class="practice-tools"><button class="icon-button" data-act="retry" aria-label="Restart the lesson" title="Restart the lesson">' + icon('restart') + '</button>' +
       '<button class="icon-button" data-act="toggle-keyboard" aria-label="Keyboard guide" aria-pressed="' + (store.settings.keyboard !== false) + '" title="Keyboard guide">' + icon('keyboard') + '</button>' +
@@ -1691,6 +1697,8 @@
     var now = typedLine.querySelector(".word.now");
     if (!now || now.getAttribute("data-wi") !== String(session.wi)) {
       typedLine.innerHTML = typedLineInner();
+      var countEl = document.querySelector("#run .mock-type .mock-count");
+      if (countEl && session.words) countEl.textContent = "Word " + Math.min(session.wi + 1, session.words.length) + " of " + session.words.length;
       var exam = !!session.exam;
       var words = passage.querySelectorAll(".word");
       if (words.length === session.words.length) {
@@ -1877,8 +1885,36 @@
     var width = pct + "%";
     if (fill.style.width !== width) fill.style.width = width;
   }
+  function scrollIntoContainerView(container, el) {
+    if (!container || !el) return;
+    var cRect = container.getBoundingClientRect();
+    var eRect = el.getBoundingClientRect();
+    var pad = 14;
+    if (eRect.top < cRect.top + pad) {
+      if (container.scrollTop > 0) {
+        container.scrollTop = Math.max(0, container.scrollTop + (eRect.top - cRect.top - pad));
+      }
+    } else if (eRect.bottom > cRect.bottom - pad) {
+      var maxScroll = container.scrollHeight - container.clientHeight;
+      container.scrollTop = Math.min(maxScroll, container.scrollTop + (eRect.bottom - cRect.bottom + pad));
+    }
+  }
   function revealCurrent() {
     var stage = document.querySelector("#run .stage");
+    var mock = document.querySelector("#run .mock");
+    if (mock) {
+      var passage = mock.querySelector(".passage");
+      var typedLine = mock.querySelector(".typed-line");
+      if (passage) {
+        var pNow = passage.querySelector(".word.now");
+        scrollIntoContainerView(passage, pNow);
+      }
+      if (typedLine) {
+        var tNow = typedLine.querySelector(".word.now");
+        scrollIntoContainerView(typedLine, tNow);
+      }
+      return;
+    }
     var cur = document.querySelector(".box.now, .word.now");
     var wordMark = session.wi;
     if (session.kind === "exact") {
@@ -1983,7 +2019,7 @@
   }
 
   function guidanceHTML(next) {
-    if (session && session.practice40 && session.practice40.full) return "";
+    if (session && (session.exam || (session.practice40 && session.practice40.full))) return "";
     if (store.settings.keyboard === false) return store.settings.hands === false ? '' : handsSVG(next);
     return '<div class="keyboard-guide">' + keyboardHTML(next) + (store.settings.hands === false ? '' : handsSVG(next)) + '</div>';
   }
@@ -2222,8 +2258,9 @@
       else if (!exam && i < session.wi) c = session.marks[i] === "ok" ? "ok" : "bad";
       master += '<span class="word ' + c + (session.lang === 'en' ? '' : ' devlys') + '" aria-label="' + esc(w.h) + '">' + esc(session.lang === 'en' ? w.h : w.k) + "</span> ";
     });
-    return '<div class="mock"><div class="mock-pane"><div class="mock-k">Master</div><div class="passage' + cls + '">' + master + "</div></div>" +
-      '<div class="mock-pane"><div class="mock-k">Type</div><div class="typed-line' + cls + '">' + typedLineInner() + "</div></div>" +
+    return '<div class="mock">' +
+      '<div class="mock-pane mock-master"><div class="mock-k"><span>Master Passage (मूल पाठ)</span><span class="mock-count">' + (session.words ? session.words.length + ' words' : '') + '</span></div><div class="passage' + cls + '">' + master + '</div></div>' +
+      '<div class="mock-pane mock-type"><div class="mock-k"><span>Typing Area (टाइपिंग क्षेत्र)</span><span class="mock-count">Word ' + Math.min(session.wi + 1, session.words.length) + ' of ' + session.words.length + '</span></div><div class="typed-line' + cls + '">' + typedLineInner() + '</div></div>' +
       (session.showFix && session.lastFix ? '<div class="fix">' + esc(session.lastFix) + "</div>" : "") +
       "</div>";
   }

@@ -420,10 +420,10 @@ p { line-height: 1.55; }
 .word { border-radius: 7px; padding: 1px 6px 3px; }
 .word.ok { color: #1b7a46; background: #e5f6ec; }
 .word.bad { color: #a61b16; background: #fdeceb; }
-.mock { display: flex; flex-direction: column; gap: 12px; }
-.mock-pane { border: 1px solid var(--line); border-radius: 12px; background: #fff; padding: 12px 14px; }
-.mock-k { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
-.mock-pane .passage { max-height: 26vh; }
+.mock { display: flex; flex-direction: column; gap: 10px; flex: 1 1 0; min-height: 0; }
+.mock-pane { border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 10px 14px; flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.mock-k { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-bottom: 6px; flex: none; display: flex; justify-content: space-between; align-items: center; }
+.mock-pane .passage, .mock-pane .typed-line { flex: 1 1 0; min-height: 0; max-height: none; overflow-y: auto; overflow-x: hidden; }
 .typed-line { font-family: var(--hindi); font-size: 24px; line-height: 1.7; min-height: 2.4em; }
 .typed-line.en { font-family: var(--serif); font-size: 22px; }
 .typed-line .bad { color: var(--bad); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
