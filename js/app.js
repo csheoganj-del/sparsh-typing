@@ -745,7 +745,8 @@
       '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Goal date: ' + esc(program.endDate) + '</p>' +
       '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
       '<div><b>2. Practise your combinations</b><p>Recent errors and slow transitions choose the drill. Words rotate as your accuracy improves.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
-      '<div><b>3. Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div></div>' +
+      '<div><b>3. Speed Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div>' +
+      '<div><b>4. RSSB Exam Simulation</b><p>Real exam scenario: 400 words on Rajasthan geography, culture & ecology. DevLys 010. Space locks word. 25 Marks (Cutoff: 9/25).</p><button class="btn primary" data-act="exam-hi">10-Min Full Exam</button><button class="btn ghost" data-act="exam-hi-5min">5-Min Mini Exam</button>' + (store.bestHi ? '<p class="small muted" style="margin-top:6px;">Best: <b>' + fmt(store.bestHi.marks) + ' / 25 Marks</b> (' + store.bestHi.correct + ' correct)</p>' : '') + '</div></div>' +
       '<p class="small muted">' + program.today.fullChecks + ' full passage checks today · ' + program.today.recordedMinutes + ' recorded practice minutes. Goal: three fresh passage checks at ' + goalWpm + ' WPM and 98% accuracy. Lesson runs and short bursts do not replace that two-minute check.</p>' +
       '<details class="training-plan" open><summary>Your daily routine · about ' + program.totalMinutes + ' minutes including breaks</summary><div class="training-blocks">' + program.blocks.map(function (block) { return '<div><b>' + esc(block.title) + ' · ' + block.minutes + ' min</b><p>' + esc(block.detail) + '</p></div>'; }).join('') + '</div><p class="small muted">Take a two-minute break between blocks. You can split the blocks between morning and evening. Keep the same DevLys keyboard mapping when you switch devices.</p></details>' +
       '<details class="training-plan"><summary>Your 20-day checkpoints</summary><p class="small muted">' + esc(program.note) + '</p><div class="training-checkpoints">' + program.milestones.map(function (m) { return '<span>Day ' + m.day + '<b>' + m.targetWpm + ' WPM</b><small>' + esc(m.date) + '</small></span>'; }).join('') + '</div><p class="small muted">Stable finger-to-key mapping, preparing the next keystroke, and small hand movements guide the technique practice. <a href="https://userinterfaces.aalto.fi/how-we-type/" target="_blank" rel="noopener">Typing research</a>. The exact daily routine is a practice plan, not a proven deadline for reaching ' + goalWpm + ' WPM.</p></details>' +
@@ -3263,16 +3264,17 @@
       return "<li>" + esc(w.want) + " · you typed " + esc(w.got) + "</li>";
     }).join("");
     return '<div class="wrap narrow"><div class="card"><div class="kicker">' + esc(session.lesson.title) + "</div>" +
-      "<h2>" + fmt(r.marks) + " / 25</h2>" +
+      "<h2>" + fmt(r.marks) + " / 25 Marks</h2>" +
+      '<div class="exam-status-tag ' + (qualify ? 'pass' : 'fail') + '">' + (qualify ? '✓ QUALIFIED (Cleared 9.0 Cutoff)' : '✗ UNDER QUALIFYING CUTOFF (Minimum 9.0 Marks Required)') + '</div>' +
       "<p>" + (full ? "Full marks. Repeat this accuracy inside the time." : qualify ? "The qualifying line is crossed. 25/25 needs every word correct." : "Under 9. Failing this paper can cost the marks of the other three papers. Confirm that rule on the current RSSB notice.") + "</p>" +
       '<div class="stats">' +
       '<div class="stat"><b>' + r.correct + "</b><span>Correct words</span></div>" +
       '<div class="stat"><b>' + r.wrong + "</b><span>Wrong locks</span></div>" +
-      '<div class="stat"><b>' + fmt(r.wordRate) + "</b><span>Correct words / min</span></div>" +
+      '<div class="stat"><b>' + (r.correct + r.wrong > 0 ? Math.round((r.correct / (r.correct + r.wrong)) * 100) : 0) + "%</b><span>Word Accuracy</span></div>" +
       '<div class="stat"><b>' + fmt(r.wpm) + "</b><span>Key WPM</span></div></div>" +
       '<p class="small muted">' + need + " A wrong word is not subtracted. It is simply not counted. After Space you cannot fix it.</p>" +
       (list ? '<h3>Words that fell</h3><ul class="wrong-list">' + list + "</ul>" : "") +
-      '<div class="row-btns"><button class="btn primary" data-act="retry">Again</button><button class="btn" data-go="path">Back to lessons</button></div></div></div>';
+      '<div class="row-btns"><button class="btn primary" data-act="retry">Again</button><button class="btn" data-go="home">Practice Dashboard</button></div></div></div>';
   }
 
   function placementResult(r) {
@@ -3480,7 +3482,8 @@
       });
       return;
     }
-    if (name === "exam-hi") startExam("hi");
+    if (name === "exam-hi") startExam("hi", 10, 400);
+    if (name === "exam-hi-5min") startExam("hi", 5, 200);
     if (name === "exam-en") startExam("en");
     if (name === "para") {
       startLock({
@@ -3534,16 +3537,16 @@
     }
   }
 
-  function startExam(lang) {
+  function startExam(lang, durationMinutes, wordTarget) {
     var hi = lang !== "en";
     startLock({
-      id: hi ? "exam-hi" : "exam-en",
-      title: hi ? "RSSB Hindi speed · 10 min" : "RSSB English speed · 10 min",
+      id: hi ? (durationMinutes === 5 ? "exam-hi-5min" : "exam-hi") : (durationMinutes === 5 ? "exam-en-5min" : "exam-en"),
+      title: hi ? ("RSSB Hindi speed · " + (durationMinutes || 10) + " min") : ("RSSB English speed · " + (durationMinutes || 10) + " min"),
       teach: hi
         ? "An unseen passage of about 400 words. Each correct word is 0.0625 marks. Space locks the word and you cannot go back. The key light is off, as in the exam. Keep the keyboard on English (US). Under 9, this paper fails. Confirm 9/25 on the current RSSB notice."
         : "500 words. Each correct word is 0.05 marks. Space locks the word. Capitals and full stops count. No key light. 180 correct words is the qualifying 9.",
-      words: hi ? KD.buildHindiPassage(400) : KD.buildEnglishPassage(500),
-      limit: 600000,
+      words: hi ? KD.buildHindiPassage(wordTarget || (durationMinutes === 5 ? 200 : 400)) : KD.buildEnglishPassage(wordTarget || (durationMinutes === 5 ? 250 : 500)),
+      limit: (durationMinutes || 10) * 60000,
       hints: "none",
       showFix: false,
       lang: hi ? "hi" : "en",

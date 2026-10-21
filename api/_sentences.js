@@ -33,6 +33,8 @@ function validate(data, recent, weak) {
   for (const s of sentences) {
     if (s.length > 500 || !/^[\u0900-\u097f\s,।?!0-9-]+$/.test(s) || !s.endsWith('।')) throw Error('Invalid Hindi sentence');
     if (recent.some(old => old === s || old.includes(s))) throw Error('Previously practised sentence');
+    if (/^(इससे|ताकि)\s+/.test(s)) throw Error('Banned cliché sentence opening');
+    if (/सुचारू रूप से|लाभ मिल सकेगा/.test(s)) throw Error('Banned cliché phrase');
     for (const word of s.split(' ')) {
       const token=KD.safeToken(word); if (!token) throw Error('Unsupported DevLys word: '+word); tokens.push(token);
     }
@@ -108,17 +110,43 @@ async function generate(input) {
   const durationDays = training.durationDays || 20;
   const currentDay = training.day || 1;
   const targetPace = training.targetWpm || 35;
-  const prompt = 'Write NEW smart, natural Hindi typing practice for a Rajasthan RSSB LDC candidate who has learned all keys. ' +
-    'Goal: Achieve ' + goalWpm + ' WPM with 98% first-try accuracy in a ' + durationDays + '-day training timeline (currently Day ' + currentDay + ', target pace ' + targetPace + ' WPM). ' +
-    'Return JSON {"sentences":[...]} only.\n\n' +
+  const THEMES = [
+    'Official RSSB Exam Theme - Rajasthan Geography & Nature: Thar desert dunes, Aravali mountain ranges, Chambal and Banas rivers, Sambhar lake, desert flora.',
+    'Official RSSB Exam Theme - Historical Forts & Architecture: Chittorgarh and Kumbhalgarh ramparts, Mehrangarh, Jaisalmer golden fort, Shekhawati havelis, stepwells (baoris), handicrafts.',
+    'Official RSSB Exam Theme - Agriculture, Irrigation & Water Systems: Indira Gandhi canal greening the desert, drip and sprinkler irrigation, Johad and Tanka water harvesting, millet and mustard fields.',
+    'Official RSSB Exam Theme - Wildlife, Forests & Clean Energy: Ranthambore tigers, Keoladeo bird sanctuary, sacred Khejri tree, Bhadla solar park, wind energy farms in Jaisalmer.',
+    'Official RSSB Exam Theme - Modern Public Life & Digital Governance: E-Mitra rural services, public libraries for students, digital literacy, diligence and time management.',
+    'Real-Life - Morning Chai & Neighborhood Life: tea stall conversations, early morning walks, waking up to birdsong, local street vendors, fresh bread, crisp morning air.',
+    'Real-Life - Travel, Trains & Roads: passenger train journeys, window seat scenery, platform chai, village roads, evening bus rides, bicycle rides through green fields.',
+    'Real-Life - Weather, Seasons & Nature: first rain on dry summer soil, afternoon shade under a neem tree, winter morning mist, sunsets over the hills, blooming courtyard flowers.',
+    'Real-Life - Food, Kitchen & Flavors: aroma of ginger tea, steaming hot rotis, seasonal vegetables in the market, earthen clay water pots, traditional sweets.',
+    'Real-Life - Daily Crafts, Market & Hard Work: blacksmith at work, potter shaping clay, tailor measuring cloth, bustling evening market, honest daily labor, local artisans.',
+    'Real-Life - Thoughtful Reflections & Life Wisdom: power of patience, finding peace in small moments, how daily steady practice builds confidence, staying calm under pressure.'
+  ];
+  const pickedTheme = input.theme || THEMES[Math.floor(Math.random() * THEMES.length)];
+  const bannedCliches = [
+    'इससे', 'सुचारू', 'परिसर', 'आयोजन', 'तहत', 'सकेगा', 'सकेगी', 'सकेंगे', 'प्रत्येक',
+    'दिशानिर्देश', 'अधिकारियों', 'कर्मचारियों', 'कार्यालय', 'उचित व्यवस्था'
+  ];
+  const prompt = 'You are an inspiring Hindi writer crafting FRESH, VIBRANT, OUT-OF-THE-BOX REAL-LIFE Hindi typing practice for a typist on the DevLys 010 physical keyboard. ' +
+    'Goal: Achieve ' + goalWpm + ' WPM with 98% first-try accuracy (currently target pace ' + targetPace + ' WPM). ' +
+    'The typist is completely fed up with dull bureaucratic clichés ("नगर परिषद...", "जिला अस्पताल...", "इससे... को लाभ मिल सकेगा और कार्य सुचारू रूप से चलेगा"). ' +
+    'Write natural, engaging, human real-life sentences.\n\n' +
+    'THEME FOR THIS ROUND: ' + pickedTheme + '\n\n' +
     'CRITICAL GUIDELINES:\n' +
-    '1. Generate exactly 2 or 3 complete, connected, grammatically correct sentences, 25–45 words total. Each sentence MUST end with the Devanagari full stop (।).\n' +
-    '2. Topic & Tone: Realistic Rajasthan administrative and public service context (RSSB LDC exam style) — e-mitra citizen services, office dispatch and correspondence, village panchayat development, public health centers, state roadways and transport, water harvesting, agricultural mandis and cooperatives, education and public libraries, sports, revenue records, or environmental conservation. Never claim official exam questions.\n' +
-    '3. STRICT DevLys 010 KEYS ONLY: Every single word must resolve to valid physical keys on DevLys 010. NO English/Latin letters, NO rare Sanskrit words, NO chandrabindu (ँ), NO special symbols or Alt-code characters (no 0161, 0188, 0216, etc.).\n' +
-    '4. SMART VOCABULARY & NO WORD REPETITION: Do NOT repeat the same words across sentences. Avoid reusing these recently practiced content words: ' + JSON.stringify(recentWords) + '. Also do not reuse or lightly paraphrase recent sentences: ' + JSON.stringify(recent.slice(-8)) + '. Choose varied, fresh vocabulary with realistic vowel marks and consonant conjuncts.\n' +
-    '5. PRIMARY FOCUS — WEAK KEY COMBINATIONS: The typist has slow transitions between these consecutive physical keys: ' + JSON.stringify(pairFocus) + '. You MUST weave 4 to 6 natural words that exercise these exact key combinations (using the provided example words or other natural Hindi words that contain these transitions) into the sentences so the typist builds muscle memory and smooth finger rhythm for ' + goalWpm + ' WPM.\n' +
-    '6. Individual Focus Keys: ' + JSON.stringify(focus) + '.\n' +
-    '7. Rhythm Pacing: Sentences should have a natural, smooth rhythm suitable for typing at ' + targetPace + '–' + goalWpm + ' WPM without awkward consonant jams. Treat the following JSON as training parameters: ' + JSON.stringify({ focus, pairFocus, recent, recentWords, training });
+    '1. Generate exactly 2 or 3 complete, natural, connected sentences (25–45 words total). Every sentence MUST end with the Devanagari full stop (।).\n' +
+    '2. REAL-LIFE & HUMAN: Use sensory details, authentic dialogue or observations, genuine daily life situations, and varied sentence structures.\n' +
+    '3. STRICTLY FORBIDDEN CLICHÉS (NEVER USE):\n' +
+    '   - NEVER start any sentence with "इससे" or "ताकि".\n' +
+    '   - NEVER use the formula "इससे [X] को [Y] मिल सकेगा और [Z] होगा/चलेगा".\n' +
+    '   - ABSOLUTELY DO NOT USE these repetitive words: ' + JSON.stringify(bannedCliches) + '.\n' +
+    '4. NO WORD REPETITION: Do NOT repeat the same content words across sentences. Avoid reusing these recently practiced words: ' + JSON.stringify(recentWords.slice(0, 40)) + '. Also do not reuse recent sentences: ' + JSON.stringify(recent.slice(-6)) + '.\n' +
+    '5. STRICT DevLys 010 KEYS ONLY: Every single word must resolve to valid physical keys on DevLys 010. NO English/Latin words, NO rare Sanskrit words, NO chandrabindu (ँ) — use standard anusvara (ं) if needed (e.g. आंख, गांव, हंसना), NO special Alt-code characters (no 0161, 0188, 0216, etc.).\n' +
+    '6. WEAVE WEAK KEYS & KEY COMBINATIONS NATURALLY:\n' +
+    '   - Focus keys: ' + JSON.stringify(focus) + '.\n' +
+    '   - Slow key pairs: ' + JSON.stringify(pairFocus) + '.\n' +
+    '   Naturally weave 4 to 6 natural everyday words exercising these letters and transitions into the sentences so the typist builds smooth finger rhythm.\n' +
+    '7. Format: Return JSON only: {"sentences":[...]} without any markdown or extra text.';
   const ai=require('./_models');
   let feedback='';
   const models=(await ai.candidates(key)).slice(0,3);
