@@ -2123,7 +2123,7 @@
       return w;
     }
     function isDevlysMark(ch) {
-      return "fkhsSa¡qw`zZW+%".indexOf(ch) >= 0;
+      return "fkhsSa¡qw`zZW+%~".indexOf(ch) >= 0;
     }
     function isMark(i) {
       if (i < 0 || i >= text.length) return false;

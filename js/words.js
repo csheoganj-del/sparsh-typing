@@ -713,7 +713,7 @@
       return { line: row.line, sig: sig, used: used.count, at: used.at, passage: row.passage, tie: rng(), index: index, hit: score.hit, covered: score.covered, fit: fit, length: length };
     });
     ranked.sort(function (a, b) {
-      return (a.used - b.used) || (a.at - b.at) || (b.covered - a.covered) || (b.passage - a.passage) || (b.fit - a.fit) || (b.hit - a.hit) || (a.tie - b.tie) || (a.index - b.index);
+      return (a.used - b.used) || (a.at - b.at) || (a.tie - b.tie) || (b.covered - a.covered) || (b.passage - a.passage) || (b.fit - a.fit) || (b.hit - a.hit) || (a.index - b.index);
     });
     var seq = [];
     var sentenceIds = [];

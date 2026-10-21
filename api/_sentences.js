@@ -121,7 +121,11 @@ async function generate(input) {
     'Real-Life - Weather, Seasons & Nature: first rain on dry summer soil, afternoon shade under a neem tree, winter morning mist, sunsets over the hills, blooming courtyard flowers.',
     'Real-Life - Food, Kitchen & Flavors: aroma of ginger tea, steaming hot rotis, seasonal vegetables in the market, earthen clay water pots, traditional sweets.',
     'Real-Life - Daily Crafts, Market & Hard Work: blacksmith at work, potter shaping clay, tailor measuring cloth, bustling evening market, honest daily labor, local artisans.',
-    'Real-Life - Thoughtful Reflections & Life Wisdom: power of patience, finding peace in small moments, how daily steady practice builds confidence, staying calm under pressure.'
+    'Real-Life - Thoughtful Reflections & Life Wisdom: power of patience, finding peace in small moments, how daily steady practice builds confidence, staying calm under pressure.',
+    'Real-Life - Newspapers & Current Affairs: election reports, agricultural market trends, monsoon updates, economic and infrastructure development, youth education and examinations.',
+    'Real-Life - Literature & Books: classic Premchand stories, Dinkar poetry, library reading, philosophy of simple living, power of knowledge and education.',
+    'Real-Life - Internet, Science & Space: ISRO lunar exploration, solar energy revolution, internet and digital communications, computers and mobile connectivity.',
+    'Real-Life - Culture, Festivals & Heritage: Diwali clay lamps, Holi colors and harmony, Teej and Gangaur folk festivals, temple architecture and timeless heritage.'
   ];
   const pickedTheme = input.theme || THEMES[Math.floor(Math.random() * THEMES.length)];
   const bannedCliches = [

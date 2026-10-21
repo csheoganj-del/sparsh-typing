@@ -85,4 +85,38 @@ assert(htmlRam1.includes('<span class="over" aria-hidden="true">j</span>'), 'ove
 let htmlRam2 = ctx.boxHTML('now', 'राम', 'रा', false, false, 'jke', 'jk');
 assert(htmlRam2.includes('<span class="over" aria-hidden="true">jk</span>'), 'over must contain only jk after typing aa matra: ' + htmlRam2);
 
-console.log('All matra highlight and cumulative speed checks passed successfully.');
+// 3. Test conversion and rendering of matras for r, u, ri, and au
+const rMatras = ['धर्म', 'कर्म', 'सूर्य', 'वर्ष', 'गर्व', 'ईर्ष्या', 'तीर्थंकर', 'सर्वोच्च', 'प्रकाश', 'क्रम', 'ट्रक', 'ड्रम', 'भ्रम', 'ग्राम', 'प्रेम', 'तीव्र'];
+for (const w of rMatras) {
+  const k = KD.unicodeToKruti(w);
+  const back = KD.krutiToUnicode(k);
+  assert.equal(back, w, 'Reph/Paden round-trip mismatch for: ' + w);
+  assert(!/[\u0900-\u097f]/.test(k), 'Kruti conversion leaked Unicode in: ' + w);
+}
+
+const uMatras = ['कुसुम', 'सुख', 'दुकान', 'पुत्र', 'फूल', 'धूप', 'सूरज', 'मूल', 'शुरू', 'जरूर', 'रुपया', 'रूप', 'रुचि', 'रूखा', 'गुरु'];
+for (const w of uMatras) {
+  const k = KD.unicodeToKruti(w);
+  const back = KD.krutiToUnicode(k);
+  assert.equal(back, w, 'U/UU matra round-trip mismatch for: ' + w);
+  assert(!/[\u0900-\u097f]/.test(k), 'Kruti conversion leaked Unicode in: ' + w);
+}
+
+assert(KD.examWordCorrect('#i;k', '#i;k'), 'Direct Kruti match for रुपया');
+
+const riMatras = ['कृपा', 'कृषि', 'दृष्टि', 'हृदय', 'प्रकृति', 'ऋषि', 'ऋतु', 'पृथ्वी', 'सृष्टि', 'अमृत'];
+for (const w of riMatras) {
+  const k = KD.unicodeToKruti(w);
+  const back = KD.krutiToUnicode(k);
+  assert.equal(back, w, 'Ri matra round-trip mismatch for: ' + w);
+  assert(!/[\u0900-\u097f]/.test(k), 'Kruti conversion leaked Unicode in: ' + w);
+}
+
+const auWords = ['चौपाल', 'चौराहा', 'चौक', 'दौड़', 'मौसम', 'मौका'];
+for (const w of auWords) {
+  const k = KD.unicodeToKruti(w);
+  const back = KD.krutiToUnicode(k);
+  assert.equal(KD.cleanUni(back), KD.cleanUni(w), 'Au matra round-trip mismatch for: ' + w);
+}
+
+console.log('All matra highlight, r/u/ri conversions, and cumulative speed checks passed successfully.');
