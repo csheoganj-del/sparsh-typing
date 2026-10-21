@@ -463,7 +463,7 @@ body.fit.mock-mode .mock-pane .typed-line {
   height: 100% !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
-  font-family: var(--hindi) !important;
+  font-family: 'RSSB DevLys 010', var(--hindi) !important;
   font-size: var(--drill, 24px) !important;
   line-height: 1.65 !important;
   padding-right: 6px !important;

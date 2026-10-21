@@ -85,31 +85,6 @@ assert(htmlRam1.includes('<span class="over" aria-hidden="true">j</span>'), 'ove
 let htmlRam2 = ctx.boxHTML('now', 'राम', 'रा', false, false, 'jke', 'jk');
 assert(htmlRam2.includes('<span class="over" aria-hidden="true">jk</span>'), 'over must contain only jk after typing aa matra: ' + htmlRam2);
 
-// Test Authentic Hindi view rendering (when store is active and devlysView is false)
-const hindiCtx = vm.createContext({
-  session: { lang: 'hi' },
-  store: { settings: { devlysView: false } },
-  esc: s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-});
-vm.runInContext(appSource.slice(appSource.indexOf('  function isLegacyView('), appSource.indexOf('  var caretWidths = ')), hindiCtx);
-
-let h0 = hindiCtx.boxHTML('now', 'ऊंची', '', false, false, 'mwaph', '');
-assert(h0.includes('<span class="ink">ऊंची</span>'), 'Target must be authentic Hindi ऊंची, not mwaph: ' + h0);
-assert(!h0.includes('devlys'), 'Authentic Hindi box must not have devlys class: ' + h0);
-
-let h1 = hindiCtx.boxHTML('now', 'ऊंची', 'ऊ', false, false, 'mwaph', 'mw');
-assert(h1.includes('<span class="over" aria-hidden="true">ऊ</span>'), 'over must contain clean authentic Hindi character: ' + h1);
-
-let hDone = hindiCtx.boxHTML('now', 'ऊंची', 'ऊंची', false, false, 'mwaph', 'mwaph');
-assert(hDone.includes('<span class="over" aria-hidden="true">ऊंची</span>'), 'full authentic Hindi word completed: ' + hDone);
-assert(hDone.includes('typed'), 'box must have typed class when completed: ' + hDone);
-
-// When devlysView is explicitly set to true:
-hindiCtx.store.settings.devlysView = true;
-let d0 = hindiCtx.boxHTML('now', 'ऊंची', '', false, false, 'mwaph', '');
-assert(d0.includes('<span class="ink">mwaph</span>'), 'Target must be raw DevLys mwaph when toggled: ' + d0);
-assert(d0.includes('devlys'), 'DevLys box must have devlys class: ' + d0);
-
 // 3. Test conversion and rendering of matras for r, u, ri, and au
 const rMatras = ['धर्म', 'कर्म', 'सूर्य', 'वर्ष', 'गर्व', 'ईर्ष्या', 'तीर्थंकर', 'सर्वोच्च', 'प्रकाश', 'क्रम', 'ट्रक', 'ड्रम', 'भ्रम', 'ग्राम', 'प्रेम', 'तीव्र'];
 for (const w of rMatras) {

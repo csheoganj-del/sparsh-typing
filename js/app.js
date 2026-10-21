@@ -1367,7 +1367,6 @@
       '<label><input id="show-hands" type="checkbox"' + (store.settings.hands !== false ? ' checked' : '') + '> Hand guidance</label>' +
       '<label><input id="show-metrics" type="checkbox"' + (store.settings.metrics !== false ? ' checked' : '') + '> Show live WPM and accuracy</label>' +
       '<label><input id="block-errors" type="checkbox"' + (store.settings.blockErrors === true ? ' checked' : '') + '> Block on errors</label>' +
-      '<label><input id="devlys-view" type="checkbox"' + (store.settings.devlysView === true ? ' checked' : '') + '> Raw DevLys 010 typewriter font view</label>' +
       '<label class="size">Text size <input id="text-size" type="range" min="18" max="40" value="' + drillSize() + '"></label>' +
       '<p class="small muted">RSSB · DevLys 010 · Standard keyboard</p></div></details></div>' + cloudStatusHTML() + '<span class="practice-user">' + (authToken ? esc(currentUser) : 'Hindi') + '</span></header>' +
       lessonNavigationHTML() +
@@ -1389,8 +1388,6 @@
       };
     });
     document.getElementById('block-errors').onchange = function (event) { store.settings.blockErrors = event.target.checked; save(); };
-    var devlysViewInput = document.getElementById('devlys-view');
-    if (devlysViewInput) devlysViewInput.onchange = function (event) { store.settings.devlysView = event.target.checked; save(); paint(); };
     var settingsMenu = document.querySelector('.practice-settings');
     settingsMenu.addEventListener('toggle', function () {
       if (!settingsMenu.open) settingsMenu.querySelector('summary').blur();
@@ -1566,45 +1563,21 @@
     }
     return { index: index, stepAt: stepAt, flash: flash };
   }
-  function isLegacyView() {
-    return !!(typeof store !== "undefined" && store && store.settings && store.settings.devlysView === true && session && session.lang !== "en");
-  }
-  function matchHindiPrefix(target, typedLegacy, live, legacyKey) {
-    var text = (live && live.text) || "";
-    var wait = !!(live && live.wait);
-    if (!text && !typedLegacy) return { formed: "", wait: false };
-    if (text && target.indexOf(text) === 0) return { formed: text, wait: wait };
-    var onPath = legacyKey ? (legacyKey.indexOf(typedLegacy) === 0) : false;
-    if (!onPath) return { formed: text, wait: wait };
-    var formed = "";
-    for (var len = text.length - 1; len >= 1; len--) {
-      var sub = text.slice(0, len);
-      if (target.indexOf(sub) === 0) { formed = sub; break; }
-    }
-    var nextLegacyChar = legacyKey ? legacyKey.charAt(typedLegacy.length) : "";
-    if ("wZkKsae%~`".indexOf(nextLegacyChar) >= 0) wait = true;
-    return { formed: formed, wait: wait };
-  }
   function applyNowBox(box, frame) {
     var tok = session.tokens[frame.index];
     if (!tok) return;
     var typedLegacy = krutiSoFar(frame.index);
     var formed = "";
     var wait = false;
-    var isLegacy = isLegacyView();
     if (typedLegacy) {
-      if (isLegacy) {
-        formed = typedLegacy;
-      } else {
-        var live = KD.liveForm(typedLegacy);
-        var match = matchHindiPrefix(tok.h || "", typedLegacy, live, tok.k);
-        formed = match.formed;
-        wait = match.wait;
-      }
+      var live = KD.liveForm(typedLegacy);
+      var text = live.text || "";
+      if (text && (tok.h || "").indexOf(text) === 0) { formed = text; wait = !!live.wait; }
     }
     var cur = frame.stepAt && frame.stepAt.ti === frame.index;
     var missFlash = frame.flash || !!(cur && session.badTokens && session.badTokens[frame.index]);
-    var shown = isLegacy ? (tok.k != null ? tok.k : (tok.h || "·")) : (tok.h || "·");
+    var isLegacy = tok.k != null && session.lang !== "en";
+    var shown = isLegacy ? tok.k : (tok.h || "·");
     var soFar = isLegacy ? (typedLegacy || "") : (formed || "");
     var at = soFar && String(shown).indexOf(soFar) === 0 ? soFar.length : 0;
     var cls = "box now" + (missFlash ? " miss" : "") + (isLegacy ? " devlys" : "");
@@ -1651,8 +1624,8 @@
           }
         }
         var oldTok = session.tokens[oldIdx];
-        var isOldLegacy = isLegacyView();
-        var oldShown = isOldLegacy ? (oldTok && oldTok.k != null ? oldTok.k : (oldTok ? (oldTok.h || "·") : "")) : (oldTok ? (oldTok.h || "·") : "");
+        var isOldLegacy = oldTok && oldTok.k != null && session.lang !== "en";
+        var oldShown = isOldLegacy ? oldTok.k : (oldTok ? (oldTok.h || "·") : "");
         var past = true;
         for (var s = session.i; s < session.steps.length; s++) {
           if (session.steps[s].ti === oldIdx) { past = false; break; }
@@ -1664,8 +1637,8 @@
     }
     if (!targetBox.querySelector(".caret")) {
       var targetTok = session.tokens[frame.index];
-      var isTargetLegacy = isLegacyView();
-      var targetShown = isTargetLegacy ? (targetTok && targetTok.k != null ? targetTok.k : (targetTok ? (targetTok.h || "·") : "·")) : (targetTok ? (targetTok.h || "·") : "·");
+      var isTargetLegacy = targetTok && targetTok.k != null && session.lang !== "en";
+      var targetShown = isTargetLegacy ? targetTok.k : (targetTok ? (targetTok.h || "·") : "·");
       targetBox.className = "box now" + (isTargetLegacy ? " devlys" : "");
       targetBox.innerHTML = '<span class="ink">' + esc(targetShown) + '</span><span class="over" aria-hidden="true"></span><span class="caret" data-at="0"></span>';
     }
@@ -1678,17 +1651,18 @@
     var flash = !!(session.flash && performance.now() - session.flash < 220);
     var formed = "";
     var wait = false;
-    var isLegacy = isLegacyView();
     if (session.typed) {
-      if (session.lang === "en" || isLegacy) formed = session.typed;
+      if (session.lang === "en") formed = session.typed;
       else {
         var live = KD.liveForm(session.typed);
-        var match = matchHindiPrefix(w.h, session.typed, live, w.k);
-        formed = match.formed;
-        wait = match.wait;
+        var text = live.text || "";
+        var onPath = (w.k || "").indexOf(session.typed) === 0;
+        if (text && w.h.indexOf(text) === 0) { formed = text; wait = !!live.wait; }
+        else if (!onPath && text) formed = text;
       }
     }
-    var shown = isLegacy ? (w.k != null ? w.k : w.h) : w.h;
+    var isLegacy = w.k != null && session.lang !== "en";
+    var shown = isLegacy ? w.k : w.h;
     var soFar = isLegacy ? (session.typed || "") : (formed || "");
     var at = soFar && String(shown).indexOf(soFar) === 0 ? soFar.length : 0;
     var cls = "box now" + (flash ? " miss" : "") + (isLegacy ? " devlys" : "");
@@ -1735,19 +1709,11 @@
           if (i === session.wi) mark = "now";
           else if (!exam && i < session.wi) mark = session.marks[i] === "ok" ? "ok" : "bad";
           var curCls = words[i].className;
-          var newCls = "word" + (mark ? " " + mark : "") + (isLegacyView() ? " devlys" : "");
+          var newCls = "word" + (mark ? " " + mark : "") + (session.lang === 'en' ? '' : ' devlys');
           if (curCls !== newCls) words[i].className = newCls;
         }
       }
-    } else {
-      var isLegacy = isLegacyView();
-      var liveShown = session.typed || "";
-      if (!isLegacy && session.lang !== "en" && session.typed) {
-        var live = KD.liveForm(session.typed);
-        liveShown = live.text || session.typed;
-      }
-      if (now.textContent !== liveShown) now.textContent = liveShown;
-    }
+    } else if (now.textContent !== (session.typed || "")) now.textContent = session.typed || "";
     syncFix();
     return true;
   }
@@ -1782,8 +1748,8 @@
         if (oldWi >= 0) {
           var mark = oldWi < session.wi ? (session.marks[oldWi] === "ok" ? "done" : "bad") : "ahead";
           var oldW = session.words[oldWi];
-          var oldLegacy = isLegacyView();
-          var oldShown = oldLegacy ? (oldW && oldW.k != null ? oldW.k : (oldW ? oldW.h : "")) : (oldW ? oldW.h : "");
+          var oldLegacy = oldW && oldW.k != null && session.lang !== "en";
+          var oldShown = oldLegacy ? oldW.k : (oldW ? oldW.h : "");
           oldBox.className = "box " + mark + (oldLegacy ? " devlys" : "");
           oldBox.textContent = oldShown;
         }
@@ -1791,8 +1757,8 @@
     }
     if (!box.querySelector(".caret")) {
       var curW = session.words[session.wi];
-      var curLegacy = isLegacyView();
-      var curShown = curLegacy ? (curW && curW.k != null ? curW.k : (curW ? curW.h : "")) : (curW ? curW.h : "");
+      var curLegacy = curW && curW.k != null && session.lang !== "en";
+      var curShown = curLegacy ? curW.k : (curW ? curW.h : "");
       box.className = "box now" + (curLegacy ? " devlys" : "");
       box.innerHTML = '<span class="ink">' + esc(curShown) + '</span><span class="over" aria-hidden="true">' + esc(curShown) + '</span><span class="caret" data-at="0"></span>';
     }
@@ -1903,8 +1869,7 @@
     if (!token) return;
     var current = session.steps.slice(0, session.i).filter(function (step) { return step.ti === next.ti; }).length;
     var hEl = seqEl.querySelector(".h");
-    var shownToken = (isLegacyView() && token.k != null) ? token.k : (token.h || "");
-    if (hEl && hEl.textContent === shownToken && !seqEl.classList.contains("sequence-placeholder")) {
+    if (hEl && hEl.textContent === token.k && !seqEl.classList.contains("sequence-placeholder")) {
       var kbds = seqEl.querySelectorAll(".sequence-keys kbd");
       for (var k = 0; k < kbds.length; k++) {
         kbds[k].classList.toggle("current", k === current);
@@ -2051,9 +2016,7 @@
     if (!token) return '';
     var steps = KD.stepsFromKruti(token.k);
     var current = session.steps.slice(0, session.i).filter(function (step) { return step.ti === next.ti; }).length;
-    var shownToken = (isLegacyView() && token.k != null) ? token.k : (token.h || "");
-    var tokenCls = isLegacyView() ? "h devlys" : "h";
-    return '<div class="teaching-sequence" aria-label="Key order for ' + esc(token.h) + '"><span class="' + tokenCls + '" aria-label="' + esc(token.h) + '">' + esc(shownToken) + '</span><span class="sequence-keys">' +
+    return '<div class="teaching-sequence" aria-label="Key order for ' + esc(token.h) + '"><span class="h devlys" aria-label="' + esc(token.h) + '">' + esc(token.k) + '</span><span class="sequence-keys">' +
       steps.map(function (step, i) { return (i ? '<span class="sequence-arrow">→</span>' : '') + '<kbd' + (i === current ? ' class="current"' : '') + '>' + esc(KD.actionLabel(KD.actionId(step))) + '</kbd>'; }).join('') + '</span></div>';
   }
 
@@ -2102,10 +2065,10 @@
   }
   function boxHTML(state, target, formed, flash, wait, legacy, typedLegacy) {
     var label = target;
-    var legacyActive = (typeof store === "undefined" && legacy != null && (!session || session.lang !== "en")) || (typeof isLegacyView === "function" && isLegacyView());
-    if (legacyActive) { target = legacy; formed = typedLegacy || ""; }
+    var isLegacy = legacy != null && session.lang !== "en";
+    if (isLegacy) { target = legacy; formed = typedLegacy || ""; }
     var cls = "box " + (state === "wait" ? "ahead" : state) + (flash && state === "now" ? " miss" : "");
-    if (legacyActive) cls += " devlys";
+    if (isLegacy) cls += " devlys";
     var a11y = ' aria-label="' + esc(label) + '"';
     if (state !== "now") return '<span class="' + cls + '"' + a11y + '>' + esc(target) + "</span>";
     var at = 0;
@@ -2240,15 +2203,15 @@
       else if (past) state = "done";
       var formed = "";
       var wait = false;
-      var k = krutiSoFar(index);
-      if (state === "now" && k) {
-        if (isLegacyView()) {
-          formed = k;
-        } else {
+      if (state === "now") {
+        var k = krutiSoFar(index);
+        if (k) {
           var live = KD.liveForm(k);
-          var match = matchHindiPrefix(tok.h || "", k, live, tok.k);
-          formed = match.formed;
-          wait = match.wait;
+          var text = live.text || "";
+          if (text && (tok.h || "").indexOf(text) === 0) {
+            formed = text;
+            wait = !!live.wait;
+          }
         }
       }
       if (past && session.badTokens && session.badTokens[index]) state = "bad";
@@ -2267,14 +2230,18 @@
       if (i === session.wi) state = "now";
       var formed = "";
       var wait = false;
-      var isLegacy = isLegacyView();
       if (state === "now" && session.typed) {
-        if (session.lang === "en" || isLegacy) formed = session.typed;
+        if (session.lang === "en") formed = session.typed;
         else {
           var live = KD.liveForm(session.typed);
-          var match = matchHindiPrefix(w.h, session.typed, live, w.k);
-          formed = match.formed;
-          wait = match.wait;
+          var text = live.text || "";
+          var onPath = (w.k || "").indexOf(session.typed) === 0;
+          if (text && w.h.indexOf(text) === 0) {
+            formed = text;
+            wait = !!live.wait;
+          } else if (!onPath && text) {
+            formed = text;
+          }
         }
       }
       html += boxHTML(state, w.h, formed, flash, wait, w.k, session.typed);
@@ -2286,14 +2253,12 @@
   function mockHTML() {
     var exam = !!session.exam;
     var cls = session.lang === "en" ? " en" : "";
-    var isLegacy = isLegacyView();
     var master = "";
     session.words.forEach(function (w, i) {
       var c = "";
       if (i === session.wi) c = "now";
       else if (!exam && i < session.wi) c = session.marks[i] === "ok" ? "ok" : "bad";
-      var wordText = isLegacy ? (w.k != null ? w.k : w.h) : (session.lang === "en" ? w.h : w.h);
-      master += '<span class="word ' + c + (isLegacy ? ' devlys' : '') + '" aria-label="' + esc(w.h) + '">' + esc(wordText) + "</span> ";
+      master += '<span class="word ' + c + (session.lang === 'en' ? '' : ' devlys') + '" aria-label="' + esc(w.h) + '">' + esc(session.lang === 'en' ? w.h : w.k) + "</span> ";
     });
     return '<div class="mock">' +
       '<div class="mock-pane mock-master"><div class="mock-k"><span>Master Passage (मूल पाठ)</span><span class="mock-count">' + (session.words ? session.words.length + ' words' : '') + '</span></div><div class="passage' + cls + '">' + master + '</div></div>' +
@@ -2304,23 +2269,12 @@
   function typedLineInner() {
     var typed = "";
     var snaps = session.typedWords || [];
-    var isLegacy = isLegacyView();
     for (var i = 0; i < session.wi; i++) {
       var snap = snaps[i];
       var text = snap ? snap.text : session.words[i].h;
-      var wordShown = isLegacy ? (snap && snap.raw != null ? snap.raw : session.words[i].k) : text;
-      typed += '<span class="word ' + (session.marks[i] === "ok" ? "ok" : "bad") + (isLegacy ? ' devlys' : '') + '">' + esc(wordShown) + "</span> ";
+      typed += '<span class="word ' + (session.marks[i] === "ok" ? "ok" : "bad") + (session.lang === 'en' ? '' : ' devlys') + '">' + esc(session.lang === 'en' ? text : (snap && snap.raw != null ? snap.raw : session.words[i].k)) + "</span> ";
     }
-    var liveShown = "";
-    if (session.typed) {
-      if (isLegacy || session.lang === "en") {
-        liveShown = session.typed;
-      } else {
-        var live = KD.liveForm(session.typed);
-        liveShown = live.text || session.typed;
-      }
-    }
-    typed += '<span class="word now' + (isLegacy ? ' devlys' : '') + '" data-wi="' + session.wi + '">' + esc(liveShown) + "</span>";
+    typed += '<span class="word now' + (session.lang === 'en' ? '' : ' devlys') + '" data-wi="' + session.wi + '">' + esc(session.typed || "") + "</span>";
     return typed;
   }
 
