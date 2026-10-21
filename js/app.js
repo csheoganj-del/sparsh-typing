@@ -196,6 +196,7 @@
     saveSoonSince = 0;
     ensureTraining();
     captureResume();
+    if (KD.slimTries) store.tries = KD.slimTries(store.tries);
     var body = JSON.stringify(store);
     try { localStorage.setItem(STORE, body); } catch (e) {}
     if (!folderSave) { syncStatus(authToken ? 'Saved on this device · cloud unavailable' : 'Saved on this device · sign in to sync'); return; }
@@ -588,7 +589,7 @@
       '<button class="nav-link' + (screen === 'badges' ? ' active' : '') + '" data-go="badges">Badges</button>' +
       '<details class="nav-dropdown"><summary>Hindi Touch Typing <span>▾</span></summary><div class="nav-popover">' +
       '<button data-go="home">Hindi course</button><button data-go="chart">Keyboard chart</button>' +
-      '<button data-act="exam-hi">Hindi exam · 10 minutes</button><button data-act="exam-en">English exam · 10 minutes</button>' +
+      '<button data-act="exam-hi">Hindi exam · 10 minutes</button>' +
       '<button data-act="weak">Weak keys practice</button><button data-act="start-ai-drill">Personalized practice</button>' +
       '<button data-act="toggle-unlock">' + (store.unlockedAll ? 'Use sequential lessons' : 'Allow all lessons') + '</button></div></details></nav>' +
       '<nav class="account-nav" aria-label="Account menu">' + cloudStatusHTML() + '<span class="nav-language h" lang="hi">हिन्दी</span>' +
@@ -740,15 +741,16 @@
     var learn = offer
       ? 'Use new Hindi sentences to carry your combinations into normal reading. Your next practice pace is ' + program.nextTargetWpm + ' WPM with 98% first-try accuracy.'
       : 'Continue the course. Learn one key, then combinations and words.';
-    var cumulative = KD.cumulativeSpeed ? KD.cumulativeSpeed(store) : null;
-    var lessonRun = KD.latestLessonRun(store);
-    var shownWpm = cumulative != null ? cumulative : (lessonRun ? lessonRun.wpm : (last ? last.wpm : null));
-    var shownLabel = 'cumulative WPM';
+    var fullChecks = (state.attempts || []).filter(function (row) { return row && row.full && !row.guided && row.ms >= 120000 && row.wpm > 0; });
+    var lastFull = fullChecks.length ? fullChecks[fullChecks.length - 1] : null;
+    var shownWpm = lastFull ? lastFull.wpm : null;
+    var shownLabel = lastFull ? '2-minute check' : 'no full check yet';
     var goalWpm = program.goalWpm || 50;
+    var weakNames = offer && offer.names && offer.names.length ? offer.names.join(', ') : 'your recent misses';
     return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span></div></div>' +
-      '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Goal date: ' + esc(program.endDate) + '</p>' +
+      '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Practice window ends ' + esc(program.endDate) + '</p>' +
       '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
-      '<div><b>2. Practise your combinations</b><p>Recent errors and slow transitions choose the drill. Words rotate as your accuracy improves.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
+      '<div><b>2. Practise your combinations</b><p>Recent errors choose the drill, with extra attention to ' + esc(weakNames) + '. A wrong Space locks the word on the exam.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="para">Word-lock transfer</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
       '<div><b>3. Speed Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div>' +
       '<div><b>4. RSSB Exam Simulation</b><p>Real exam scenario: 400 words on Rajasthan geography, culture & ecology. DevLys 010. Space locks word. 25 Marks (Cutoff: 9/25).</p><button class="btn primary" data-act="exam-hi">10-Min Full Exam</button><button class="btn ghost" data-act="exam-hi-5min">5-Min Mini Exam</button>' + (store.bestHi ? '<p class="small muted" style="margin-top:6px;">Best: <b>' + fmt(store.bestHi.marks) + ' / 25 Marks</b> (' + store.bestHi.correct + ' correct)</p>' : '') + '</div></div>' +
       '<p class="small muted">' + program.today.fullChecks + ' full passage checks today · ' + program.today.recordedMinutes + ' recorded practice minutes. Goal: three fresh passage checks at ' + goalWpm + ' WPM and 98% accuracy. Lesson runs and short bursts do not replace that two-minute check.</p>' +
@@ -764,7 +766,8 @@
     session.lesson.id = 'practice40'; session.lesson.title = practice.title;
     session.lesson.teach = practice.teach; session.lesson.stage = 'practice';
     session.lesson.scoreFree = false; session.lesson.acc = 98;
-    session.lesson.min = 0; session.lesson.mid = 40; session.lesson.high = 50;
+    var checkGoal = (store.training && (store.training.goalWpm === 45 || store.training.goalWpm === 50)) ? store.training.goalWpm : 50;
+    session.lesson.min = 0; session.lesson.mid = Math.max(30, checkGoal - 10); session.lesson.high = checkGoal;
     session.lesson.oppositeShift = false; session.lesson.hand = ''; session.hand = ''; session.anchor = null;
     session.limit = 120000; session.practice40 = { full: practice.full, guided: false, sentenceIds: practice.sentenceIds || [], source: practice.source };
     session.hints = practice.full ? 'none' : 'hindi';
@@ -779,7 +782,7 @@
     return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi · ' + targetGoal + ' WPM practice</div><h1>' + (goal ? targetGoal + ' WPM with clean typing' : r.realAcc < 98 ? 'Build accuracy first' : 'Keep building your rhythm') + '</h1>' +
       '<div class="dials">' + dialHTML('Correct key WPM', fmt(r.wpm), Math.min(100, r.wpm / targetGoal * 100), false) + dialHTML('First-try accuracy', Math.round(r.realAcc) + '%', r.realAcc, false) + dialHTML('Time', dur(r.ms), 0, true) + '</div>' +
       '<p>' + (session.practice40.full ? 'Fresh Hindi passage' : 'Familiar-key practice; full Hindi passage speed is not measured yet') + (session.practice40.guided ? ' · guidance used.' : '.') + '</p><p>' + (!timed ? 'Finish a full two-minute check to save a speed result.' : state.reached ? 'You have repeated the goal on three fresh passages. Keep practising new text.' : 'Repeat the goal on three fresh passages with at least 98% first-try accuracy. Correcting mistakes helps final accuracy, but does not erase first-try mistakes.') + '</p>' +
-      '<div class="row-btns"><button class="btn primary" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="practice40-check">New speed check</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
+      '<div class="row-btns"><button class="btn primary" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="para">Word-lock transfer</button><button class="btn" data-act="practice40-check">New speed check</button><button class="btn" data-act="exam-hi">10-minute Hindi exam</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
   }
   function pathHTML() { return homeHTML(); }
 
@@ -3531,7 +3534,6 @@
     }
     if (name === "exam-hi") startExam("hi", 10, 400);
     if (name === "exam-hi-5min") startExam("hi", 5, 200);
-    if (name === "exam-en") startExam("en");
     if (name === "para") {
       startLock({
         id: "para",
@@ -3567,7 +3569,7 @@
       if (session && session.practice40Weak) { act("practice40-weak"); return; }
       if (session && session.recoveryFor != null) { var index = session.recoveryFor; startLesson(index, KD.buildRecovery(KD.LESSONS[index], store, [])); }
       else if (session && session.practice40) startPractice40();
-      else if (session && session.exam) startExam(session.lang);
+      else if (session && session.exam) startExam("hi", session.limit >= 600000 ? 10 : 5);
       else if (session && session.placement) act("placement");
       else if (session && session.index >= 0) startLesson(session.index);
       else if (session && session.lesson && session.lesson.id === "coach" && session.coachPlan) startCoach(session.coachPlan);
@@ -3585,20 +3587,19 @@
   }
 
   function startExam(lang, durationMinutes, wordTarget) {
-    var hi = lang !== "en";
+    var minutes = durationMinutes === 5 ? 5 : 10;
+    var words = wordTarget || (minutes === 5 ? 200 : 400);
     startLock({
-      id: hi ? (durationMinutes === 5 ? "exam-hi-5min" : "exam-hi") : (durationMinutes === 5 ? "exam-en-5min" : "exam-en"),
-      title: hi ? ("RSSB Hindi speed · " + (durationMinutes || 10) + " min") : ("RSSB English speed · " + (durationMinutes || 10) + " min"),
-      teach: hi
-        ? "An unseen passage of about 400 words. Each correct word is 0.0625 marks. Space locks the word and you cannot go back. The key light is off, as in the exam. Keep the keyboard on English (US). Under 9, this paper fails. Confirm 9/25 on the current RSSB notice."
-        : "500 words. Each correct word is 0.05 marks. Space locks the word. Capitals and full stops count. No key light. 180 correct words is the qualifying 9.",
-      words: hi ? KD.buildHindiPassage(wordTarget || (durationMinutes === 5 ? 200 : 400)) : KD.buildEnglishPassage(wordTarget || (durationMinutes === 5 ? 250 : 500)),
-      limit: (durationMinutes || 10) * 60000,
+      id: minutes === 5 ? "exam-hi-5min" : "exam-hi",
+      title: "RSSB Hindi speed · " + minutes + " min",
+      teach: "An unseen Hindi passage of about " + words + " words. Each correct word is 0.0625 marks. Space locks the word and you cannot go back. The key light is off, as in the exam. Keep the keyboard on English (US). The 10-minute paper fails under 9 out of 25. Confirm 9/25 on the current RSSB notice.",
+      words: KD.buildHindiPassage(words),
+      limit: minutes * 60000,
       hints: "none",
       showFix: false,
-      lang: hi ? "hi" : "en",
+      lang: "hi",
       exam: true,
-      finger: hi ? "DevLys / Kruti" : "QWERTY"
+      finger: "DevLys / Kruti"
     });
   }
 

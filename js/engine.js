@@ -206,6 +206,26 @@
     return book;
   };
 
+  /* Playback tapes are the bulky part of a save. Keep them for the newest attempts only. */
+  KD.slimTries = function (tries) {
+    if (!tries || typeof tries !== "object" || Array.isArray(tries)) return {};
+    var taped = [];
+    Object.keys(tries).forEach(function (id) {
+      (tries[id] || []).forEach(function (row) {
+        if (row && Array.isArray(row.tape) && row.tape.length) taped.push(row);
+      });
+    });
+    taped.sort(function (p, q) { return (q.at || 0) - (p.at || 0); });
+    var keep = {};
+    taped.slice(0, 12).forEach(function (row) { keep[row.at] = 1; });
+    Object.keys(tries).forEach(function (id) {
+      (tries[id] || []).forEach(function (row) {
+        if (row && Array.isArray(row.tape) && row.tape.length && !keep[row.at]) delete row.tape;
+      });
+    });
+    return tries;
+  };
+
   KD.livePassageSignature = function (lesson) {
     if (!lesson || !Array.isArray(lesson.tokens) || !lesson.tokens.length) return "";
     return JSON.stringify([lesson.pattern || "", !!lesson.wordlock, lesson.tokens.map(function (token) {
@@ -297,8 +317,26 @@
       var parsed = new Date(date + "T00:00:00Z");
       return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date ? date : "";
     }
+    function chosenGoal(training) {
+      var goal = Number(training && training.goalWpm);
+      return goal === 45 || goal === 50 ? goal : 0;
+    }
+    function chosenBaseline(training) {
+      var speed = Number(training && training.baselineWpm);
+      if (!(speed > 0)) return null;
+      return { wpm: speed, estimated: !!(training && training.baselineEstimated) };
+    }
     var trainingDates = [trainingDate(a.training), trainingDate(b.training)].filter(Boolean).sort();
-    if (trainingDates.length) out.training = { startDate: trainingDates[0], goalWpm: 50, durationDays: 20 };
+    if (trainingDates.length) {
+      var baseline = chosenBaseline(a.training) || chosenBaseline(b.training);
+      var otherBaseline = chosenBaseline(a.training) && chosenBaseline(b.training) ? chosenBaseline(b.training) : null;
+      if (baseline && baseline.estimated && otherBaseline && !otherBaseline.estimated) baseline = otherBaseline;
+      out.training = { startDate: trainingDates[0], goalWpm: chosenGoal(a.training) || chosenGoal(b.training) || 50, durationDays: 20 };
+      if (baseline) {
+        out.training.baselineWpm = baseline.wpm;
+        out.training.baselineEstimated = baseline.estimated;
+      }
+    }
     else delete out.training;
     var drills = {};
     [a.adaptive, b.adaptive].forEach(function (adaptive) {
@@ -363,7 +401,7 @@
       if (list.length > 8) list = list.slice(list.length - 8);
       tries[id] = list;
     });
-    out.tries = tries;
+    out.tries = KD.slimTries(tries);
     function coachOf(v) {
       if (!v || typeof v !== "object" || Array.isArray(v) || !v.note) return null;
       var repeat = [];

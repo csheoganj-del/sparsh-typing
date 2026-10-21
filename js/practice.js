@@ -51,11 +51,13 @@
       if (!r.sentenceIds || !r.sentenceIds.length) return false;
       return r.sentenceIds.every(function (id) { if (used[id]) return false; used[id] = true; return true; });
     });
+    var chosen = Number(store.training && store.training.goalWpm);
+    var goal = chosen === 45 || chosen === 50 ? chosen : KD.PRACTICE_TARGET;
     return { allowed: allowed, bank: bank, full: full, last: last, attempts: attempts,
-      sentenceUsage: progress.sentenceUsage, target: KD.PRACTICE_TARGET,
+      sentenceUsage: progress.sentenceUsage, target: goal,
       canStart: allowed.indexOf('Space') >= 0 && bank.length >= 2,
-      reached: stable.length === 3 && fresh && stable.every(function (r) { return r.full && !r.guided && r.wpm >= KD.PRACTICE_TARGET && r.acc >= 98 && r.realAcc >= 98; }),
-      stage: !last ? 'Find your steady starting speed' : last.realAcc < 98 ? 'Accuracy first' : last.wpm < 20 ? 'Build smooth key combinations' : last.wpm < 30 ? 'Build a steady rhythm' : last.wpm < KD.PRACTICE_TARGET ? 'Build toward 50 WPM' : 'Repeat 50 WPM on fresh passages' };
+      reached: stable.length === 3 && fresh && stable.every(function (r) { return r.full && !r.guided && r.wpm >= goal && r.acc >= 98 && r.realAcc >= 98; }),
+      stage: !last ? 'Find your steady starting speed' : last.realAcc < 98 ? 'Accuracy first' : last.wpm < 20 ? 'Build smooth key combinations' : last.wpm < 30 ? 'Build a steady rhythm' : last.wpm < goal ? 'Build toward ' + goal + ' WPM' : 'Repeat ' + goal + ' WPM on fresh passages' };
   };
   KD.practice40Lesson = function (store, random) {
     var state = KD.practice40State(store), rng = random || Math.random;

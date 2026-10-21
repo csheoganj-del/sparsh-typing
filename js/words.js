@@ -736,7 +736,8 @@
   KD.historyLesson = function (store, random) {
     store = store || {};
     var bank = historyBank();
-    var cap = KD.PRACTICE_TARGET || 50;
+    var chosen = Number(store.training && store.training.goalWpm);
+    var cap = chosen === 45 || chosen === 50 ? chosen : (KD.PRACTICE_TARGET || 50);
     var bars = KD.starBars(store, { min: 14, mid: 22, high: 32, cap: cap, acc: 94 });
     var names = KD.weakKeyNames(store);
     var selection = historyTokens(store, bank, random);
@@ -756,6 +757,7 @@
       title: "Exam sentence · " + (names[0] || "your keys") + " · " + bars.high + " WPM",
       teach: "An exam sentence exercise using varied practice text, with extra attention to " + who + ". The words stay in sentence order. Unused sentences come first. Pass at " + bars.min + " WPM and " + bars.acc + "% accuracy. Practice goal: " + bars.high + " WPM with 98% first-try accuracy. Stars also account for accuracy. " +
         "Completing the sentence gives you a new sentence. Reaching the goal with 98% accuracy on both measures raises the next bar by 2 WPM, up to " + cap + "." +
+        ((store.misses && store.misses.Space >= 10) ? " A wrong Space locks the word on the exam, so finish each word before you press it." : "") +
         " Nothing new is added while you type.",
       why: ["Hindi practice sentences with no repeats until the sentence pool is used. Practice goal: " + bars.high + " WPM with 98% first-try accuracy."],
       tokens: tokens,

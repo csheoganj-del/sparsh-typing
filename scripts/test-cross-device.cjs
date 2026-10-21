@@ -73,6 +73,19 @@ assert.equal(KD.mergeProfile(profile, many).keys.KeyD.samples.length, 16);
 const training = KD.mergeProgress({ stars: {}, training: { startDate: '2026-10-20' }, adaptive: { drills: [{ at: 1, signature: 'one' }] } },
   { stars: {}, training: { startDate: '2026-10-18' }, adaptive: { drills: Array.from({ length: 10 }, (_, i) => ({ at: i + 1, signature: String(i) })) } });
 assert.deepEqual(training.training, { startDate: '2026-10-18', goalWpm: 50, durationDays: 20 });
+const chosenGoal = KD.mergeProgress(
+  { stars: {}, training: { startDate: '2026-10-18', goalWpm: 45, baselineWpm: 31.1, baselineEstimated: false } },
+  { stars: {}, training: { startDate: '2026-10-20', goalWpm: 50, baselineWpm: 33, baselineEstimated: true } });
+assert.equal(chosenGoal.training.goalWpm, 45);
+assert.equal(chosenGoal.training.baselineWpm, 31.1);
+assert.equal(chosenGoal.training.baselineEstimated, false);
+assert.equal(chosenGoal.training.startDate, '2026-10-18');
+const bulky = { stars: {}, tries: {} };
+for (let i = 0; i < 20; i++) bulky.tries['lesson-' + i] = [{ at: i + 1, wpm: 30, acc: 98, tape: [{ ok: 1, t: 1 }] }];
+const slim = KD.mergeProgress(bulky, null);
+const keptTapes = Object.keys(slim.tries).reduce((n, id) => n + slim.tries[id].filter(row => row.tape).length, 0);
+assert.equal(keptTapes, 12, 'Only the newest playback tapes stay in a cloud save');
+assert.equal(slim.tries['lesson-0'][0].wpm, 30, 'A trimmed attempt keeps its speed');
 assert.equal(training.adaptive.drills.length, 8);
 assert.deepEqual(KD.mergeProgress(training, training).adaptive, training.adaptive);
 assert.equal(KD.mergeProgress({ stars: {}, training: { startDate: '2026-02-30' } }, null).training, undefined);

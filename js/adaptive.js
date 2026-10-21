@@ -329,7 +329,7 @@
       { title: 'Read and transfer', minutes: 8, detail: 'Read a fresh passage and type comfortably. A speed check is optional today.' }
     ] : [
       { title: 'Accuracy and technique', minutes: 8, detail: 'Practise familiar words. Look at the text, use small relaxed movements, and keep your usual consistent fingering.' },
-      { title: 'Targeted combinations', minutes: 8, detail: 'Rotate the recent difficult pairs through different Hindi words. Use the opposite Shift where appropriate.' },
+      { title: 'Targeted combinations', minutes: 8, detail: 'Rotate the recent difficult keys through different Hindi words. A wrong Space locks the word on the exam, so finish the word before you press it.' },
       { title: 'Fresh passage and check', minutes: 8, detail: 'Complete one independent two-minute check without guides. Review first-try accuracy before another attempt.' },
       { title: 'Rhythm and transfer', minutes: 8, detail: clean ? 'If accuracy stays at 98% or above, try a relaxed 25-second rhythm burst, then return to normal pace on new text.' :
         'Stay near your comfortable pace. Add a short rhythm burst only after a fresh check reaches 98% first-try accuracy.' }
@@ -347,8 +347,8 @@
       if (row.full && !row.guided) todayActivity.fullChecks++;
     });
     Object.keys(todayActivity).forEach(function (key) { todayActivity[key] = Math.round(todayActivity[key] * 10) / 10; });
-    var milestones = unique([1, Math.min(5, duration), Math.min(10, duration), Math.min(15, duration), duration]).map(function (checkpoint) {
-      return { day: checkpoint, date: addDays(startDate, checkpoint - 1), targetWpm: Math.round(baseline + (goal - baseline) * checkpoint / duration), targetAccuracy: 98 };
+    var milestones = unique([1, Math.min(5, duration), Math.min(10, duration), Math.min(15, duration), duration]).map(function (checkpoint, index) {
+      return { day: checkpoint, date: addDays(startDate, checkpoint - 1), targetWpm: Math.min(goal, Math.round(baseline) + index * 2), targetAccuracy: 98 };
     });
     var lastThree = checks.slice(-3);
     return { startDate: startDate, currentDate: today, endDate: addDays(startDate, duration - 1), durationDays: duration,
@@ -360,7 +360,7 @@
       today: todayActivity, milestones: milestones,
       goalReached: lastThree.length === 3 && lastThree.every(function (row) { return row.wpm >= goal && row.acc >= 98 && row.realAcc >= 98; }),
       qualifyingChecks: lastThree.filter(function (row) { return row.wpm >= goal && row.acc >= 98 && row.realAcc >= 98; }).length,
-      note: 'The ' + duration + '-day calendar is a practice plan, not a prediction. Calendar targets are aspirational; your next speed target follows measured typing and accuracy. ' +
+      note: 'The ' + duration + '-day calendar is a practice plan, not a prediction. Checkpoints rise 2 WPM at a time from the measured check, and the end date is not a promise of the goal. ' +
         (estimated ? 'The starting ' + Math.round(baseline) + ' WPM is an estimate until a fresh speed check is recorded.' : 'Lessons and short drills do not establish two-minute passage speed.') };
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

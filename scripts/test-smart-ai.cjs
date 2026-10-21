@@ -50,8 +50,8 @@ for (const lesson of KD.LESSONS) { training45Store.stars[lesson.id] = 5; }
 const program45 = KD.trainingProgram(training45Store, Date.UTC(2026, 9, 18, 12));
 assert.equal(program45.goalWpm, 45, 'Goal WPM should be 45');
 assert.equal(program45.durationDays, 20, 'Duration should be 20 days');
-assert.equal(program45.milestones.at(-1).targetWpm, 45, 'Final milestone should be 45 WPM');
-assert.equal(program45.milestones[0].targetWpm, 31, 'Day 1 milestone target is 31 WPM (interpolated from baseline 30)');
+assert.equal(program45.milestones[0].targetWpm, 30, 'Day 1 checkpoint stays at the measured check');
+assert.equal(program45.milestones.at(-1).targetWpm, 38, 'Checkpoints rise 2 WPM at a time and stay under the 45 WPM goal');
 console.log('45 WPM 20-day training program milestones passed:', program45.milestones);
 
 // 4. Verify pairFocus generation and prompt building in api/_sentences
