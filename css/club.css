@@ -262,7 +262,8 @@ body.fit .bump-dot { background: currentColor; width: 10px; height: 2px; }
 .practice40 p { color: #64717c; line-height: 1.6; font-size: 13px; }
 .practice40-speed { text-align: right; min-width: 130px; }
 .practice40-speed b { display: block; font-size: 34px; color: #3498db; }
-.practice40-speed span { font-size: 11px; color: #64717c; }
+.practice40-speed span { font-size: 11px; color: #64717c; text-transform: uppercase; letter-spacing: 0.5px; }
+.practice40-speed small { display: block; font-size: 11px; color: #8899a6; margin-top: 2px; }
 .practice40-routine { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 20px; margin-top: 22px; }
 .practice40-routine > div { display: flex; flex-direction: column; align-items: start; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; }
 .practice40-routine p { flex: 1; margin: 8px 0 12px; }

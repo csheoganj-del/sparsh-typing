@@ -48,7 +48,7 @@
     return rows.slice(-8).map(function (row) { return row.wpm; });
   };
 
-  /* Cumulative speed across all completed typing runs.
+  /* Cumulative / aggregate speed across all completed typing runs across all devices.
      Calculates total words divided by total minutes across attempts so the
      speed reflects cumulative learning and updates with every practice. */
   KD.cumulativeSpeed = function (store) {
@@ -59,7 +59,7 @@
       if (!row || typeof row !== "object" || !row.at) return;
       var wpm = Number(row.wpm);
       if (!(wpm > 0)) return;
-      if (row.scoreFree || row.guided) return;
+      if (row.scoreFree) return;
       var lessonId = id || row.id || "";
       if (/^repair-/.test(lessonId)) return;
       if (seen[row.at]) return;
@@ -71,6 +71,8 @@
     past.forEach(function (r) { add(r, r && r.id); });
     var checks = store.practice40 && Array.isArray(store.practice40.attempts) ? store.practice40.attempts : [];
     checks.forEach(function (r) { add(r, "practice40"); });
+    var exams = Array.isArray(store.exams) ? store.exams : [];
+    exams.forEach(function (r) { add(r, r && r.id); });
     var tries = store.tries || {};
     Object.keys(tries).forEach(function (id) {
       (tries[id] || []).forEach(function (r) { add(r, id); });
@@ -94,6 +96,44 @@
       return Math.round((totalWords / totalMinutes) * 10) / 10;
     }
     return Math.round((wpmSum / rows.length) * 10) / 10;
+  };
+
+  /* Detailed aggregate stats across all devices and typing sessions. */
+  KD.aggregateStats = function (store) {
+    var speed = KD.cumulativeSpeed(store);
+    if (speed == null) return null;
+    var seen = {};
+    var count = 0, totalMs = 0, totalWords = 0;
+    function add(row, id) {
+      if (!row || typeof row !== "object" || !row.at) return;
+      var wpm = Number(row.wpm);
+      if (!(wpm > 0) || row.scoreFree) return;
+      var lessonId = id || row.id || "";
+      if (/^repair-/.test(lessonId)) return;
+      if (seen[row.at]) return;
+      seen[row.at] = 1;
+      count++;
+      var ms = Number(row.ms) || 0;
+      totalMs += ms;
+      if (ms > 0) totalWords += wpm * (ms / 60000);
+    }
+    (store.log || []).forEach(function (r) { add(r, r && r.id); });
+    var past = store.live && Array.isArray(store.live.past) ? store.live.past : [];
+    past.forEach(function (r) { add(r, r && r.id); });
+    var checks = store.practice40 && Array.isArray(store.practice40.attempts) ? store.practice40.attempts : [];
+    checks.forEach(function (r) { add(r, "practice40"); });
+    var exams = Array.isArray(store.exams) ? store.exams : [];
+    exams.forEach(function (r) { add(r, r && r.id); });
+    var tries = store.tries || {};
+    Object.keys(tries).forEach(function (id) {
+      (tries[id] || []).forEach(function (r) { add(r, id); });
+    });
+    return {
+      wpm: speed,
+      attempts: count,
+      minutes: Math.round((totalMs / 60000) * 10) / 10,
+      words: Math.round(totalWords)
+    };
   };
 
   /* Milliseconds to wait before the next cloud write. A paused store waits
@@ -201,7 +241,7 @@
       slips: slips,
       words: words
     });
-    if (list.length > 8) list = list.slice(list.length - 8);
+    if (list.length > 20) list = list.slice(list.length - 20);
     book[id] = list;
     return book;
   };
@@ -274,6 +314,7 @@
       if (!s.touch.pairs || typeof s.touch.pairs !== "object") s.touch.pairs = {};
       if (typeof s.touch.rest !== "string") s.touch.rest = "";
       if (!Array.isArray(s.log)) s.log = [];
+      if (!Array.isArray(s.exams)) s.exams = [];
       if (!s.tries || typeof s.tries !== "object" || Array.isArray(s.tries)) s.tries = {};
       if (!("bestHi" in s)) s.bestHi = null;
       if (!("bestEn" in s)) s.bestEn = null;
@@ -374,8 +415,22 @@
     a.log.forEach(addLog);
     b.log.forEach(addLog);
     logs.sort(function (p, q) { return (p.at || 0) - (q.at || 0); });
-    if (logs.length > 24) logs = logs.slice(logs.length - 24);
+    if (logs.length > 120) logs = logs.slice(logs.length - 120);
     out.log = logs;
+    var seenExams = {};
+    var exams = [];
+    function addExam(row) {
+      if (!row || typeof row !== "object" || !row.at) return;
+      var key = (row.at || 0) + "|" + (row.id || "");
+      if (seenExams[key]) return;
+      seenExams[key] = 1;
+      exams.push(row);
+    }
+    ((a && a.exams) || []).forEach(addExam);
+    ((b && b.exams) || []).forEach(addExam);
+    exams.sort(function (p, q) { return (p.at || 0) - (q.at || 0); });
+    if (exams.length > 80) exams = exams.slice(exams.length - 80);
+    out.exams = exams;
     var ids = {};
     Object.keys(a.tries).forEach(function (id) { ids[id] = 1; });
     Object.keys(b.tries).forEach(function (id) { ids[id] = 1; });
@@ -398,7 +453,7 @@
       (Array.isArray(a.tries[id]) ? a.tries[id] : []).forEach(addTry);
       (Array.isArray(b.tries[id]) ? b.tries[id] : []).forEach(addTry);
       list.sort(function (p, q) { return (p.at || 0) - (q.at || 0); });
-      if (list.length > 8) list = list.slice(list.length - 8);
+      if (list.length > 20) list = list.slice(list.length - 20);
       tries[id] = list;
     });
     out.tries = KD.slimTries(tries);

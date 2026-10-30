@@ -21,7 +21,7 @@ function username(value) {
   if (!/^[a-z0-9_-]{3,32}$/.test(name)) throw new Error('Use 3–32 letters, numbers, underscores or hyphens for your username.');
   return name;
 }
-function empty() { return {stars:{},placed:{},misses:{},settings:{sound:true,hints:true},touch:{keys:{},pairs:{}},log:[],tries:{}}; }
+function empty() { return {stars:{},placed:{},misses:{},settings:{sound:true,hints:true},touch:{keys:{},pairs:{}},log:[],tries:{},exams:[]}; }
 function read(file, fallback) { try { return JSON.parse(fs.readFileSync(file,'utf8')); } catch { return fallback; } }
 function write(file, data) { fs.mkdirSync(path.dirname(file),{recursive:true}); fs.writeFileSync(file,JSON.stringify(data,null,2)); }
 function requireStorage() { if (HOSTED && (!CLOUD || !SECRET)) throw new Error('Cloud storage is not configured.'); }

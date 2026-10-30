@@ -99,26 +99,31 @@
   }
 
   function recentRuns(store) {
-    var checks = [], lessons = [], seen = {};
+    var runs = [], seen = {};
     function add(row, kind) {
-      if (!row || !row.at || !Number.isFinite(row.wpm) || !(row.wpm > 0) || row.guided || row.scoreFree) return;
-      if (kind === 'check' && (!row.full || row.ms < 120000)) return;
-      if (kind === 'lesson' && (row.pattern !== 'history' || (row.ms != null && row.ms < 15000))) return;
+      if (!row || !row.at || !Number.isFinite(row.wpm) || !(row.wpm > 0) || row.scoreFree) return;
+      if (kind === 'check' && (!row.full || (row.ms && row.ms < 10000))) return;
+      if (kind === 'lesson' && row.ms != null && row.ms < 5000) return;
       var words = row.words || [], signature = (row.sentenceIds || []).join('|') || row.signature || words.join(' ');
       // Legacy lessons lack a duration. Require enough text to exclude tiny drills.
       if (kind === 'lesson' && row.ms == null && words.length < 12) return;
-      var identity = kind + ':' + row.at;
+      var identity = String(row.at);
       if (seen[identity]) return;
       seen[identity] = true;
-      (kind === 'check' ? checks : lessons).push({
+      runs.push({
         at: row.at, wpm: Number(row.wpm), ms: row.ms,
-        accuracy: Number.isFinite(row.realAcc) ? row.realAcc : null,
+        accuracy: Number.isFinite(row.realAcc) ? row.realAcc : (Number.isFinite(row.acc) ? row.acc : null),
         signature: signature || (kind === 'check' ? 'fresh-check:' + row.at : ''),
         kind: kind
       });
     }
     ((store.practice40 || {}).attempts || []).forEach(function (row) { add(row, 'check'); });
     ((store.live || {}).past || []).forEach(function (row) { add(row, 'lesson'); });
+    (Array.isArray(store.exams) ? store.exams : []).forEach(function (row) { add(row, 'exam'); });
+    (store.log || []).forEach(function (row) { add(row, 'practice'); });
+    Object.keys(store.tries || {}).forEach(function (id) {
+      (store.tries[id] || []).forEach(function (row) { add(row, 'lesson'); });
+    });
     function fresh(rows) {
       var signatures = {};
       return rows.sort(function (a, b) { return b.at - a.at; }).filter(function (row) {
@@ -128,7 +133,7 @@
       }).slice(0, 8).reverse();
     }
     // A two-minute check and a short sentence are different measurements.
-    return { rows: fresh(checks.length ? checks : lessons), kind: checks.length ? 'check' : 'lesson' };
+    return { rows: fresh(runs), kind: 'practice' };
   }
 
   KD.adaptivePlan = function (raw) {
@@ -173,7 +178,8 @@
       return targets.length >= 4;
     });
     var runs = recentRuns(store), rows = runs.rows, speeds = rows.map(function (row) { return row.wpm; });
-    var baseline = speeds.length ? median(speeds) : null;
+    var agg = KD.cumulativeSpeed(store);
+    var baseline = agg != null ? agg : (speeds.length ? median(speeds) : null);
     var accuracies = rows.map(function (row) { return row.accuracy; }).filter(function (value) { return value != null; });
     var sampleCount = keyAccuracy.reduce(function (sum, row) { return sum + row.n; }, 0);
     var firstTry = accuracies.length ? median(accuracies) : sampleCount ? keyAccuracy.reduce(function (sum, row) { return sum + row.n * row.accuracy; }, 0) / sampleCount : null;
@@ -184,8 +190,8 @@
     var plateau = comparable.length >= 5 && spread <= Math.max(3, baseline * 0.1) && Math.abs(trend) <= 1 && accuracySpread <= 4;
     var focus = firstTry != null && firstTry < 98 ? 'accuracy' : candidates.length ? 'rhythm' : 'variety';
     var target = baseline == null ? null : Math.max(3, Math.min(50, focus === 'accuracy' ? Math.round(baseline * 0.97) : Math.floor(baseline + (plateau ? 1 : 2))));
-    var measured = runs.kind === 'check' ? 'fresh two-minute checks' : 'fresh sentence runs';
-    var note = baseline == null ? 'A fresh two-minute check will establish your starting speed. Practise familiar combinations with clean first presses.' :
+    var measured = 'practice runs';
+    var note = baseline == null ? 'Complete your first practice to establish your aggregate speed. Practise familiar combinations with clean first presses.' :
       (plateau ? 'Your last ' + comparable.length + ' ' + measured + ' are near ' + Math.round(baseline) + ' WPM. ' : 'Recent ' + measured + ' are near ' + Math.round(baseline) + ' WPM. ') +
       (focus === 'accuracy' ? 'Aim for 98% first-try accuracy near ' + target + ' WPM before adding speed.' : 'Rotate combinations, then try ' + target + ' WPM with at least 98% first-try accuracy.');
     return { note: note, allowed: allowed, targets: targets, retiredKeys: retired,
@@ -361,6 +367,6 @@
       goalReached: lastThree.length === 3 && lastThree.every(function (row) { return row.wpm >= goal && row.acc >= 98 && row.realAcc >= 98; }),
       qualifyingChecks: lastThree.filter(function (row) { return row.wpm >= goal && row.acc >= 98 && row.realAcc >= 98; }).length,
       note: 'The ' + duration + '-day calendar is a practice plan, not a prediction. Checkpoints rise 2 WPM at a time from the measured check, and the end date is not a promise of the goal. ' +
-        (estimated ? 'The starting ' + Math.round(baseline) + ' WPM is an estimate until a fresh speed check is recorded.' : 'Lessons and short drills do not establish two-minute passage speed.') };
+        (estimated ? 'The starting ' + Math.round(baseline) + ' WPM is an estimate until your first typing sessions are recorded.' : 'Every practice session across all your devices builds your aggregate speed toward ' + goal + ' WPM.') };
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

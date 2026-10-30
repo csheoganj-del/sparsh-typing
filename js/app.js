@@ -743,17 +743,18 @@
       : 'Continue the course. Learn one key, then combinations and words.';
     var fullChecks = (state.attempts || []).filter(function (row) { return row && row.full && !row.guided && row.ms >= 120000 && row.wpm > 0; });
     var lastFull = fullChecks.length ? fullChecks[fullChecks.length - 1] : null;
-    var shownWpm = lastFull ? lastFull.wpm : null;
-    var shownLabel = lastFull ? '2-minute check' : 'no full check yet';
+    var aggSpeed = KD.cumulativeSpeed(store);
+    var shownWpm = aggSpeed != null ? aggSpeed : (lastFull ? lastFull.wpm : null);
+    var shownLabel = 'Aggregate speed';
     var goalWpm = program.goalWpm || 50;
     var weakNames = offer && offer.names && offer.names.length ? offer.names.join(', ') : 'your recent misses';
-    return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span></div></div>' +
+    return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span>' + (lastFull ? '<small title="Last two-minute check">2-min check: ' + fmt(lastFull.wpm) + ' WPM</small>' : '') + '</div></div>' +
       '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Practice window ends ' + esc(program.endDate) + '</p>' +
       '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
       '<div><b>2. Practise your combinations</b><p>Recent errors choose the drill, with extra attention to ' + esc(weakNames) + '. A wrong Space locks the word on the exam.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="para">Word-lock transfer</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
       '<div><b>3. Speed Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div>' +
       '<div><b>4. RSSB Exam Simulation</b><p>Real exam scenario: 400 words on Rajasthan geography, culture & ecology. DevLys 010. Space locks word. 25 Marks (Cutoff: 9/25).</p><button class="btn primary" data-act="exam-hi">10-Min Full Exam</button><button class="btn ghost" data-act="exam-hi-5min">5-Min Mini Exam</button>' + (store.bestHi ? '<p class="small muted" style="margin-top:6px;">Best: <b>' + fmt(store.bestHi.marks) + ' / 25 Marks</b> (' + store.bestHi.correct + ' correct)</p>' : '') + '</div></div>' +
-      '<p class="small muted">' + program.today.fullChecks + ' full passage checks today · ' + program.today.recordedMinutes + ' recorded practice minutes. Goal: three fresh passage checks at ' + goalWpm + ' WPM and 98% accuracy. Lesson runs and short bursts do not replace that two-minute check.</p>' +
+      '<p class="small muted">' + (program.today.recordedMinutes || 0) + ' recorded practice minutes today across all devices. Goal: 98% first-try accuracy building toward ' + goalWpm + ' WPM aggregate speed.</p>' +
       '<details class="training-plan" open><summary>Your daily routine · about ' + program.totalMinutes + ' minutes including breaks</summary><div class="training-blocks">' + program.blocks.map(function (block) { return '<div><b>' + esc(block.title) + ' · ' + block.minutes + ' min</b><p>' + esc(block.detail) + '</p></div>'; }).join('') + '</div><p class="small muted">Take a two-minute break between blocks. You can split the blocks between morning and evening. Keep the same DevLys keyboard mapping when you switch devices.</p></details>' +
       '<details class="training-plan"><summary>Your 20-day checkpoints</summary><p class="small muted">' + esc(program.note) + '</p><div class="training-checkpoints">' + program.milestones.map(function (m) { return '<span>Day ' + m.day + '<b>' + m.targetWpm + ' WPM</b><small>' + esc(m.date) + '</small></span>'; }).join('') + '</div><p class="small muted">Stable finger-to-key mapping, preparing the next keystroke, and small hand movements guide the technique practice. <a href="https://userinterfaces.aalto.fi/how-we-type/" target="_blank" rel="noopener">Typing research</a>. The exact daily routine is a practice plan, not a proven deadline for reaching ' + goalWpm + ' WPM.</p></details>' +
       (state.attempts.length ? '<details><summary>Recent speed checks</summary><table class="practice40-history"><thead><tr><th>Date</th><th>Practice</th><th>WPM</th><th>First try</th></tr></thead><tbody>' + state.attempts.slice(-7).reverse().map(function (r) { return '<tr><td>' + esc(new Date(r.at).toLocaleDateString('en-IN')) + '</td><td>' + (r.full ? 'Passage' : 'Familiar keys') + (r.guided ? ' · guided' : '') + '</td><td>' + fmt(r.wpm) + '</td><td>' + Math.round(r.realAcc) + '%</td></tr>'; }).join('') + '</tbody></table></details>' : '') + '</section>';
@@ -822,7 +823,10 @@
     var profileSpeed = KD.profileSpeed(store.profile);
     if (profileSpeed) speed = profileSpeed;
     var acc = recent.length ? recent.reduce(function (sum, row) { return sum + (row.acc || 0); }, 0) / recent.length : 0;
-    var seconds = attempts.reduce(function (sum, row) { return sum + (row.ms || 0); }, 0);
+    var aggSpeed = KD.cumulativeSpeed(store);
+    var aggStats = KD.aggregateStats ? KD.aggregateStats(store) : null;
+    var displaySpeed = aggSpeed != null ? aggSpeed : (profileSpeed || speed);
+    var seconds = aggStats ? aggStats.minutes * 60000 : attempts.reduce(function (sum, row) { return sum + (row.ms || 0); }, 0);
     var covered = {};
     Object.keys(store.touch.keys || {}).forEach(function (id) { var code = id.replace(/\+S$/, ''); if (KD.BY_CODE[code]) covered[code] = true; });
     var coverage = Math.round(Object.keys(covered).length / Object.keys(KD.BY_CODE).length * 100);
@@ -846,7 +850,7 @@
       var wpm = n && total ? 12000 / (total / n) : 0;
       return '<div class="finger-stat"><span>' + esc(KD.FINGERS[id].name) + '</span><div class="stat-track"><i style="width:' + Math.min(100, wpm) + '%"></i></div><b>' + (n >= 4 ? fmt(wpm) + ' WPM' : '—') + '</b></div>';
     }).join('');
-    return '<main id="main-content" class="wrap narrow stats-page" tabindex="-1"><section class="card"><h3>Speed</h3><div class="overall-speed"><span>' + (profileSpeed ? 'Profile speed' : 'Recent speed') + '</span><div class="stat-track"><i style="width:' + Math.min(100, speed) + '%"></i></div><b>' + fmt(speed) + ' WPM</b></div>' +
+    return '<main id="main-content" class="wrap narrow stats-page" tabindex="-1"><section class="card"><h3>Speed</h3><div class="overall-speed"><span>' + (aggSpeed != null ? 'Aggregate speed' : (profileSpeed ? 'Profile speed' : 'Recent speed')) + '</span><div class="stat-track"><i style="width:' + Math.min(100, displaySpeed) + '%"></i></div><b>' + fmt(displaySpeed) + ' WPM</b></div>' +
       '<h3>Accuracy &amp; Coverage</h3><div class="dials">' + dialHTML('Accuracy', recent.length ? Math.round(acc) + '%' : '—', acc, false) + dialHTML('Coverage', coverage + '%', coverage, false) + '</div>' +
       '<div class="practice-time"><span>Recorded typing practice</span><b>' + dur(seconds) + '</b></div><div class="practice-time"><span>Learning new keys</span><b>' + dur(learningMs) + '</b></div></section>' +
       '<section class="card"><h2>Progress Overview</h2><p class="small muted">Your latest recorded attempts.</p>' + (recent.length ? chartBlock(recent) : '<p class="empty-state">Complete a lesson to see your progress.</p>') + '</section>' +
@@ -2777,6 +2781,21 @@
     if (session.index >= 0) store.touch.rest = "";
     else if (session.lesson && session.lesson.id === "coach") store.touch.rest = session.coachId || "coach";
     var at = Date.now();
+    if (session.exam) {
+      store.exams = store.exams || [];
+      store.exams.push({
+        at: at,
+        id: session.lesson ? session.lesson.id : (session.lang === 'en' ? 'exam-en' : 'exam-hi'),
+        title: session.lesson ? session.lesson.title : 'Exam',
+        ms: ms,
+        wpm: Math.round(((session.result && session.result.wpm) || 0) * 10) / 10,
+        acc: Math.round((session.result && session.result.acc) || 0),
+        realAcc: session.result && session.result.realAcc != null ? session.result.realAcc : null,
+        marks: session.result && session.result.marks != null ? Math.round(session.result.marks * 10) / 10 : null,
+        correct: session.result && session.result.correct != null ? session.result.correct : null
+      });
+      if (store.exams.length > 80) store.exams = store.exams.slice(-80);
+    }
     if (session.practice40 && ms >= 120000) {
       store.practice40 = KD.mergePractice40(store.practice40, { attempts: [{ at: at, ms: ms, wpm: session.result.wpm, acc: session.result.acc, realAcc: session.result.realAcc, full: session.practice40.full, guided: session.practice40.guided, sentenceIds: session.practice40.sentenceIds, signature: KD.livePassageSignature(session.lesson) }] });
     }
@@ -2787,7 +2806,7 @@
       if (session.kind === "lock" && session.marks.length !== session.words.length) liveStars = 0;
       session.result.stars = liveStars;
     }
-    if (session.index >= 0 && session.lesson && session.lesson.id) {
+    if (session.lesson && session.lesson.id && !session.lesson.scoreFree) {
       store.tries = KD.pushAttempt(store.tries, session.lesson.id, {
         at: at,
         acc: Math.round((session.result && session.result.acc) || 0),
@@ -2800,9 +2819,9 @@
         slips: session.slips || [],
         words: (session.tokens || []).map(function (t) { return t.h; })
       });
-      if (!session.lesson.scoreFree) askCoach();
-      focusIndex = session.index;
-      var saved = attemptsFor(session.lesson.id);
+      if (session.index >= 0 && !session.lesson.scoreFree) askCoach();
+      if (session.index >= 0) focusIndex = session.index;
+      var saved = session.index >= 0 ? attemptsFor(session.lesson.id) : [];
       var lastN = saved.length - 1;
       playState = lastN >= 0 && saved[lastN].tape && saved[lastN].tape.length
         ? { n: lastN, i: saved[lastN].tape.length, on: false }
@@ -2821,7 +2840,7 @@
       stars: (session.index >= 0 || session.live) && session.result ? (session.result.stars || 0) : 0,
       marks: session.result && session.result.marks != null ? Math.round(session.result.marks * 10) / 10 : null
     });
-    if (store.log.length > 24) store.log = store.log.slice(store.log.length - 24);
+    if (store.log.length > 120) store.log = store.log.slice(store.log.length - 120);
     if (session.live && session.lesson && store.live && store.live.lesson) {
       store.live.resume = null;
       if (session.lesson.pattern === 'history') KD.recordSentenceUsage(store.live, session.lesson, at);
@@ -3283,7 +3302,7 @@
     var r = session.result;
     if (session.placement) return placementResult(r);
     if (session.rhythmBurst) return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><h1>Rhythm practice complete</h1><p>' + Math.round(r.realAcc == null ? r.acc : r.realAcc) + '% first-try accuracy. This short burst is practice; it does not count as passage speed.</p><p>Rest for at least 30 seconds. Then use the same relaxed rhythm on fresh text.</p><div class="row-btns"><button class="btn primary" data-act="start-current">Fresh sentence practice</button><button class="btn" data-go="home">Daily plan</button></div></section></main>';
-    if (session.practice40Weak) return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi practice</div><h1>Combination practice complete</h1><p>Take this steady rhythm into your next speed check. These short drills build accuracy; they do not count as passage speed.</p><div class="row-btns"><button class="btn primary" data-act="practice40-check">Check my speed</button><button class="btn" data-act="practice40-weak">More combination practice</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
+    if (session.practice40Weak) return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi practice</div><h1>Combination practice complete</h1><p>Take this steady rhythm into your next practice. Every keystroke across all devices builds your aggregate speed.</p><div class="row-btns"><button class="btn primary" data-act="practice40-check">Check my speed</button><button class="btn" data-act="practice40-weak">More combination practice</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
     if (session.lesson.scoreFree) {
       var recovery = session.recoveryFor != null;
       return '<main id="main-content" class="wrap narrow result-page" tabindex="-1"><section class="card result-card"><div class="result-lesson">' + esc(session.lesson.title) + '</div><h1>' +
