@@ -1405,10 +1405,8 @@
     if (hideBottomBoxEl) {
       hideBottomBoxEl.onchange = function (event) {
         store.settings.hideBottomBox = event.target.checked;
-        var toggle = document.querySelector('[data-act="toggle-hide-bottom"]');
-        if (toggle) toggle.setAttribute('aria-pressed', String(event.target.checked));
         save();
-        paintShell();
+        applyBottomBoxState(store.settings.hideBottomBox);
       };
     }
     var settingsMenu = document.querySelector('.practice-settings');
@@ -1497,6 +1495,7 @@
       run.innerHTML = introHTML();
       var b = document.getElementById("start-run");
       if (b) b.onclick = beginRun;
+      bindActs(run);
       placeCaret();
       return;
     }
@@ -2285,9 +2284,9 @@
       master += '<span class="word ' + c + (session.lang === 'en' ? '' : ' devlys') + '" aria-label="' + esc(w.h) + '">' + esc(session.lang === 'en' ? w.h : w.k) + "</span> ";
     });
     var hideBottom = !!(store.settings && store.settings.hideBottomBox);
-    return '<div class="mock' + (hideBottom ? ' hide-bottom' : '') + '">' +
-      '<div class="mock-pane mock-master"><div class="mock-k"><span>Master Passage (मूल पाठ)' + (hideBottom ? ' <span class="mock-blind-badge">Blind Drill</span>' : '') + '</span><div class="mock-k-right"><button type="button" class="mock-blind-btn' + (hideBottom ? ' active' : '') + '" data-act="toggle-hide-bottom" title="' + (hideBottom ? 'Show typing area below' : 'Hide typing area to train looking only at master passage') + '">' + icon(hideBottom ? 'eyeOff' : 'eye') + '<span>' + (hideBottom ? 'Show Bottom Box' : 'Hide Bottom Box') + '</span></button><span class="mock-count">' + (session.words ? session.words.length + ' words' : '') + '</span></div></div><div class="passage' + cls + '">' + master + '</div></div>' +
-      '<div class="mock-pane mock-type"><div class="mock-k"><span>Typing Area (टाइपिंग क्षेत्र)</span><div class="mock-k-right"><button type="button" class="mock-blind-btn" data-act="toggle-hide-bottom" title="Hide typing area (Blind drill)">' + icon('eyeOff') + '<span>Hide Box</span></button><span class="mock-count">Word ' + Math.min(session.wi + 1, session.words.length) + ' of ' + session.words.length + '</span></div></div><div class="typed-line' + cls + '">' + typedLineInner() + '</div></div>' +
+    return '<div class="mock' + (hideBottom ? ' hide-bottom' : '') + '"' + (hideBottom ? ' style="grid-template-rows: 1fr !important;"' : '') + '">' +
+      '<div class="mock-pane mock-master"' + (hideBottom ? ' style="height: 100% !important;"' : '') + '><div class="mock-k"><span>Master Passage (मूल पाठ)' + (hideBottom ? ' <span class="mock-blind-badge">Blind Drill</span>' : '<span class="mock-blind-badge" style="display:none;">Blind Drill</span>') + '</span><div class="mock-k-right"><button type="button" class="mock-blind-btn' + (hideBottom ? ' active' : '') + '" data-act="toggle-hide-bottom" title="' + (hideBottom ? 'Show typing area below' : 'Hide typing area to train looking only at master passage') + '">' + icon(hideBottom ? 'eyeOff' : 'eye') + '<span>' + (hideBottom ? 'Show Bottom Box' : 'Hide Bottom Box') + '</span></button><span class="mock-count">' + (session.words ? session.words.length + ' words' : '') + '</span></div></div><div class="passage' + cls + '">' + master + '</div></div>' +
+      '<div class="mock-pane mock-type"' + (hideBottom ? ' style="display: none !important;"' : '') + '><div class="mock-k"><span>Typing Area (टाइपिंग क्षेत्र)</span><div class="mock-k-right"><button type="button" class="mock-blind-btn" data-act="toggle-hide-bottom" title="Hide typing area (Blind drill)">' + icon('eyeOff') + '<span>Hide Box</span></button><span class="mock-count">Word ' + Math.min(session.wi + 1, session.words.length) + ' of ' + session.words.length + '</span></div></div><div class="typed-line' + cls + '">' + typedLineInner() + '</div></div>' +
       (session.showFix && session.lastFix ? '<div class="fix">' + esc(session.lastFix) + "</div>" : "") +
       "</div>";
   }
@@ -3473,6 +3472,33 @@
     });
   }
 
+  function applyBottomBoxState(hide) {
+    var mock = document.querySelector(".mock");
+    if (mock) {
+      mock.classList.toggle("hide-bottom", hide);
+      mock.style.setProperty("grid-template-rows", hide ? "1fr" : "1fr 1fr", "important");
+      var master = mock.querySelector(".mock-pane.mock-master");
+      if (master) master.style.setProperty("height", "100%", "important");
+      var typePane = mock.querySelector(".mock-pane.mock-type");
+      if (typePane) typePane.style.setProperty("display", hide ? "none" : "flex", "important");
+      var badge = mock.querySelector(".mock-blind-badge");
+      if (badge) badge.style.display = hide ? "inline-flex" : "none";
+      Array.prototype.forEach.call(mock.querySelectorAll(".mock-blind-btn"), function (btn) {
+        btn.classList.toggle("active", hide);
+        btn.innerHTML = icon(hide ? "eyeOff" : "eye") + "<span>" + (hide ? "Show Bottom Box" : "Hide Bottom Box") + "</span>";
+      });
+    }
+    var topToggle = document.querySelector('.practice-tools [data-act="toggle-hide-bottom"]');
+    if (topToggle) {
+      topToggle.setAttribute("aria-pressed", String(hide));
+      topToggle.classList.toggle("active", hide);
+      topToggle.title = hide ? "Show bottom box" : "Hide bottom box (Blind drill)";
+      topToggle.innerHTML = icon(hide ? "eyeOff" : "eye");
+    }
+    var chk = document.getElementById("hide-bottom-box");
+    if (chk) chk.checked = hide;
+  }
+
   function act(name) {
     if (name === 'set-goal-45') {
       store.training = store.training || {};
@@ -3503,7 +3529,12 @@
     if (name === 'toggle-hide-bottom') {
       store.settings.hideBottomBox = !store.settings.hideBottomBox;
       save();
-      paintShell();
+      var mock = document.querySelector(".mock");
+      if (mock) {
+        applyBottomBoxState(store.settings.hideBottomBox);
+      } else {
+        paintShell();
+      }
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       return;
     }
@@ -3713,6 +3744,14 @@
     return cloudReadJob;
   }
   window.addEventListener('focus', refreshCloud);
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest("[data-act='toggle-hide-bottom']");
+    if (b) {
+      e.preventDefault();
+      e.stopPropagation();
+      act("toggle-hide-bottom");
+    }
+  });
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') refreshCloud(); });
   setInterval(function () { if (document.visibilityState === 'visible' && screen !== 'run') refreshCloud(); }, 45000);
   window.addEventListener('online', function(){if (pendingCloud) flushCloud();else refreshCloud();});

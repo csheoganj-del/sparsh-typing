@@ -404,13 +404,16 @@ body.fit.mock-mode .mock {
 }
 
 body.fit.exam-mode .mock.hide-bottom,
-body.fit.mock-mode .mock.hide-bottom {
+body.fit.mock-mode .mock.hide-bottom,
+.mock.hide-bottom {
   grid-template-rows: 1fr !important;
 }
 
 body.fit.exam-mode .mock.hide-bottom .mock-pane.mock-type,
 body.fit.mock-mode .mock.hide-bottom .mock-pane.mock-type,
-.mock.hide-bottom .mock-pane.mock-type {
+body.fit .mock.hide-bottom .mock-pane.mock-type,
+.mock.hide-bottom .mock-pane.mock-type,
+.mock.hide-bottom .mock-type {
   display: none !important;
 }
 
