@@ -357,14 +357,14 @@ if (!kept.live || kept.live.lesson.id !== "live-8" || !kept.live.resume || kept.
   console.log("FAIL resume kept", kept.live && kept.live.resume);
 }
 console.log("live", first.pattern, repair.pattern, ahead.pattern);
-const preferenceSource = { stars: {}, settings: { keyboard: false, hands: false, metrics: false, blockErrors: true, textSize: 32 } };
+const preferenceSource = { stars: {}, settings: { keyboard: false, hands: false, metrics: false, blockErrors: true, hideBottomBox: true, textSize: 32 } };
 const preferences = KD.mergeProgress(preferenceSource, null).settings;
-if (preferences.keyboard !== false || preferences.hands !== false || preferences.metrics !== false || preferences.blockErrors !== true || preferences.textSize !== 32) {
+if (preferences.keyboard !== false || preferences.hands !== false || preferences.metrics !== false || preferences.blockErrors !== true || preferences.hideBottomBox !== true || preferences.textSize !== 32) {
   bad++;
   console.log("FAIL typing preferences were lost during progress merge");
 }
 const mergedPreferences = KD.mergeProgress({ stars: { a: 3 }, settings: { keyboard: true, hands: false } }, preferenceSource).settings;
-if (mergedPreferences.keyboard !== true || mergedPreferences.hands !== false || mergedPreferences.blockErrors !== true) {
+if (mergedPreferences.keyboard !== true || mergedPreferences.hands !== false || mergedPreferences.blockErrors !== true || mergedPreferences.hideBottomBox !== true) {
   bad++;
   console.log("FAIL preferred typing preferences did not survive cloud merge");
 }

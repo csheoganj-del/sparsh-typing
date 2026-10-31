@@ -28,6 +28,8 @@
       ,restart: '<path d="M20 8a8 8 0 10.5 7M20 3v6h-6"/>'
       ,hand: '<path d="M8 13V5a2 2 0 014 0v6-8a2 2 0 014 0v8-6a2 2 0 014 0v8-3a2 2 0 014 0v8c0 4-3 6-7 6h-2c-2 0-4-1-5-3l-5-7a2 2 0 013-3l4 3" transform="translate(-2 -1) scale(.95)"/>'
       ,sound: '<path d="M11 4L6 8H3v8h3l5 4V4M15 8a6 6 0 010 8M18 5a10 10 0 010 14"/>'
+      ,eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+      ,eyeOff: '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/>'
     };
     return '<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + (paths[name] || paths.keyboard) + '</svg>';
   }
@@ -1361,10 +1363,13 @@
     document.body.classList.add("fit");
     document.body.classList.remove("course-map");
     document.body.classList.toggle("exam-mode", !!session.exam);
-    document.body.classList.toggle("mock-mode", !!(session.exam || (session.lesson && session.lesson.stage === "para")));
+    var isMockSession = !!(session.exam || (session.lesson && session.lesson.stage === "para"));
+    document.body.classList.toggle("exam-mode", !!session.exam);
+    document.body.classList.toggle("mock-mode", isMockSession);
     app.innerHTML = '<header class="practice-bar"><button class="icon-button" ' + ((session.practice40 || session.exam) ? 'data-go="home" aria-label="Leave exam" title="Leave exam"' : 'data-act="lesson-menu" aria-label="Lesson menu" title="Lesson menu (Esc)"') + '>' + icon('menu') + '</button>' +
       '<span class="practice-title">' + (session.index >= 0 ? 'Lesson ' + (session.index + 1) + ' · ' : '') + esc(session.lesson.title) + '</span>' +
       '<div class="practice-tools"><button class="icon-button" data-act="retry" aria-label="Restart the lesson" title="Restart the lesson">' + icon('restart') + '</button>' +
+      (isMockSession ? '<button class="icon-button' + (store.settings.hideBottomBox ? ' active' : '') + '" data-act="toggle-hide-bottom" aria-label="Toggle typing area (Blind drill)" aria-pressed="' + !!store.settings.hideBottomBox + '" title="' + (store.settings.hideBottomBox ? 'Show bottom box' : 'Hide bottom box (Blind drill)') + '">' + icon(store.settings.hideBottomBox ? 'eyeOff' : 'eye') + '</button>' : '') +
       '<button class="icon-button" data-act="toggle-keyboard" aria-label="Keyboard guide" aria-pressed="' + (store.settings.keyboard !== false) + '" title="Keyboard guide">' + icon('keyboard') + '</button>' +
       '<button class="icon-button" data-act="toggle-hands" aria-label="Hand guide" aria-pressed="' + (store.settings.hands !== false) + '" title="Hand guide">' + icon('hand') + '</button>' +
       '<button class="icon-button" data-act="toggle-sound" aria-label="Typing sounds" aria-pressed="' + !!store.settings.sound + '" title="Typing sounds">' + icon('sound') + '</button>' +
@@ -1374,6 +1379,7 @@
       '<label><input id="show-hands" type="checkbox"' + (store.settings.hands !== false ? ' checked' : '') + '> Hand guidance</label>' +
       '<label><input id="show-metrics" type="checkbox"' + (store.settings.metrics !== false ? ' checked' : '') + '> Show live WPM and accuracy</label>' +
       '<label><input id="block-errors" type="checkbox"' + (store.settings.blockErrors === true ? ' checked' : '') + '> Block on errors</label>' +
+      '<label><input id="hide-bottom-box" type="checkbox"' + (store.settings.hideBottomBox ? ' checked' : '') + '> Hide bottom box (Blind drill)</label>' +
       '<label class="size">Text size <input id="text-size" type="range" min="18" max="40" value="' + drillSize() + '"></label>' +
       '<p class="small muted">RSSB · DevLys 010 · Standard keyboard</p></div></details></div>' + cloudStatusHTML() + '<span class="practice-user">' + (authToken ? esc(currentUser) : 'Hindi') + '</span></header>' +
       lessonNavigationHTML() +
@@ -1395,6 +1401,16 @@
       };
     });
     document.getElementById('block-errors').onchange = function (event) { store.settings.blockErrors = event.target.checked; save(); };
+    var hideBottomBoxEl = document.getElementById('hide-bottom-box');
+    if (hideBottomBoxEl) {
+      hideBottomBoxEl.onchange = function (event) {
+        store.settings.hideBottomBox = event.target.checked;
+        var toggle = document.querySelector('[data-act="toggle-hide-bottom"]');
+        if (toggle) toggle.setAttribute('aria-pressed', String(event.target.checked));
+        save();
+        paintShell();
+      };
+    }
     var settingsMenu = document.querySelector('.practice-settings');
     settingsMenu.addEventListener('toggle', function () {
       if (!settingsMenu.open) settingsMenu.querySelector('summary').blur();
@@ -1536,6 +1552,7 @@
       guidanceHTML(session.hints === "none" && session.exam ? null : next) +
       pad;
     bindPad();
+    bindActs(run);
     var stage = run.querySelector(".stage");
     if (stage) stage.scrollTop = stageScroll;
     revealCurrent();
@@ -2267,9 +2284,10 @@
       else if (!exam && i < session.wi) c = session.marks[i] === "ok" ? "ok" : "bad";
       master += '<span class="word ' + c + (session.lang === 'en' ? '' : ' devlys') + '" aria-label="' + esc(w.h) + '">' + esc(session.lang === 'en' ? w.h : w.k) + "</span> ";
     });
-    return '<div class="mock">' +
-      '<div class="mock-pane mock-master"><div class="mock-k"><span>Master Passage (मूल पाठ)</span><span class="mock-count">' + (session.words ? session.words.length + ' words' : '') + '</span></div><div class="passage' + cls + '">' + master + '</div></div>' +
-      '<div class="mock-pane mock-type"><div class="mock-k"><span>Typing Area (टाइपिंग क्षेत्र)</span><span class="mock-count">Word ' + Math.min(session.wi + 1, session.words.length) + ' of ' + session.words.length + '</span></div><div class="typed-line' + cls + '">' + typedLineInner() + '</div></div>' +
+    var hideBottom = !!(store.settings && store.settings.hideBottomBox);
+    return '<div class="mock' + (hideBottom ? ' hide-bottom' : '') + '">' +
+      '<div class="mock-pane mock-master"><div class="mock-k"><span>Master Passage (मूल पाठ)' + (hideBottom ? ' <span class="mock-blind-badge">Blind Drill</span>' : '') + '</span><div class="mock-k-right"><button type="button" class="mock-blind-btn' + (hideBottom ? ' active' : '') + '" data-act="toggle-hide-bottom" title="' + (hideBottom ? 'Show typing area below' : 'Hide typing area to train looking only at master passage') + '">' + icon(hideBottom ? 'eyeOff' : 'eye') + '<span>' + (hideBottom ? 'Show Bottom Box' : 'Hide Bottom Box') + '</span></button><span class="mock-count">' + (session.words ? session.words.length + ' words' : '') + '</span></div></div><div class="passage' + cls + '">' + master + '</div></div>' +
+      '<div class="mock-pane mock-type"><div class="mock-k"><span>Typing Area (टाइपिंग क्षेत्र)</span><div class="mock-k-right"><button type="button" class="mock-blind-btn" data-act="toggle-hide-bottom" title="Hide typing area (Blind drill)">' + icon('eyeOff') + '<span>Hide Box</span></button><span class="mock-count">Word ' + Math.min(session.wi + 1, session.words.length) + ' of ' + session.words.length + '</span></div></div><div class="typed-line' + cls + '">' + typedLineInner() + '</div></div>' +
       (session.showFix && session.lastFix ? '<div class="fix">' + esc(session.lastFix) + "</div>" : "") +
       "</div>";
   }
@@ -3482,6 +3500,13 @@
     if (name === 'return-course') { if (session && session.recoveryFor != null) startLesson(session.recoveryFor); return; }
     if (name === 'lesson-history') { screen = 'lesson'; draw(); return; }
     if (name === 'lesson-menu' || name === 'resume-run') { togglePause(); return; }
+    if (name === 'toggle-hide-bottom') {
+      store.settings.hideBottomBox = !store.settings.hideBottomBox;
+      save();
+      paintShell();
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      return;
+    }
     if (name === 'toggle-keyboard' || name === 'toggle-hands' || name === 'toggle-sound') {
       var setting = name.slice(7);
       if (session && session.practice40 && !session.practice40.full && session.phase === "run" && (setting === "keyboard" || setting === "hands")) session.practice40.guided = true;

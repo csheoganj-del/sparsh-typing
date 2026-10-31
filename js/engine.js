@@ -556,7 +556,7 @@
     var picked = localPlayed ? a : b;
     var other = localPlayed ? b : a;
     out.settings = { sound: picked.settings.sound, hints: picked.settings.hints };
-    ["keyboard", "hands", "metrics", "blockErrors"].forEach(function (name) {
+    ["keyboard", "hands", "metrics", "blockErrors", "hideBottomBox"].forEach(function (name) {
       if (typeof picked.settings[name] === "boolean") out.settings[name] = picked.settings[name];
       else if (typeof other.settings[name] === "boolean") out.settings[name] = other.settings[name];
     });
