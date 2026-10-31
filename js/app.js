@@ -1363,7 +1363,7 @@
     document.body.classList.add("fit");
     document.body.classList.remove("course-map");
     document.body.classList.toggle("exam-mode", !!session.exam);
-    var isMockSession = !!(session.exam || (session.lesson && session.lesson.stage === "para"));
+    var isMockSession = session.kind === "lock" || !!session.exam || (session.lesson && session.lesson.stage === "para");
     document.body.classList.toggle("exam-mode", !!session.exam);
     document.body.classList.toggle("mock-mode", isMockSession);
     app.innerHTML = '<header class="practice-bar"><button class="icon-button" ' + ((session.practice40 || session.exam) ? 'data-go="home" aria-label="Leave exam" title="Leave exam"' : 'data-act="lesson-menu" aria-label="Lesson menu" title="Lesson menu (Esc)"') + '>' + icon('menu') + '</button>' +
@@ -1380,6 +1380,8 @@
       '<label><input id="show-metrics" type="checkbox"' + (store.settings.metrics !== false ? ' checked' : '') + '> Show live WPM and accuracy</label>' +
       '<label><input id="block-errors" type="checkbox"' + (store.settings.blockErrors === true ? ' checked' : '') + '> Block on errors</label>' +
       '<label><input id="hide-bottom-box" type="checkbox"' + (store.settings.hideBottomBox ? ' checked' : '') + '> Hide bottom box (Blind drill)</label>' +
+      '<label><input id="passage-highlight" type="checkbox"' + (isPassageHighlightEnabled() ? ' checked' : '') + '> Highlight word in master passage</label>' +
+      '<label><input id="live-word-color" type="checkbox"' + (isLiveWordColorEnabled() ? ' checked' : '') + '> Live error colors in typing box</label>' +
       '<label class="size">Text size <input id="text-size" type="range" min="18" max="40" value="' + drillSize() + '"></label>' +
       '<p class="small muted">RSSB · DevLys 010 · Standard keyboard</p></div></details></div>' + cloudStatusHTML() + '<span class="practice-user">' + (authToken ? esc(currentUser) : 'Hindi') + '</span></header>' +
       lessonNavigationHTML() +
@@ -1407,6 +1409,24 @@
         store.settings.hideBottomBox = event.target.checked;
         save();
         applyBottomBoxState(store.settings.hideBottomBox);
+      };
+    }
+    var phEl = document.getElementById('passage-highlight');
+    if (phEl) {
+      phEl.onchange = function (event) {
+        store.settings = store.settings || {};
+        store.settings.passageHighlight = event.target.checked;
+        save();
+        paint();
+      };
+    }
+    var lwcEl = document.getElementById('live-word-color');
+    if (lwcEl) {
+      lwcEl.onchange = function (event) {
+        store.settings = store.settings || {};
+        store.settings.liveWordColor = event.target.checked;
+        save();
+        paint();
       };
     }
     var settingsMenu = document.querySelector('.practice-settings');
@@ -1725,12 +1745,15 @@
       var countEl = document.querySelector("#run .mock-type .mock-count");
       if (countEl && session.words) countEl.textContent = "Word " + Math.min(session.wi + 1, session.words.length) + " of " + session.words.length;
       var exam = !!session.exam;
+      var hlOn = isPassageHighlightEnabled();
       var words = passage.querySelectorAll(".word");
       if (words.length === session.words.length) {
         for (var i = 0; i < words.length; i++) {
           var mark = "";
-          if (i === session.wi) mark = "now";
-          else if (!exam && i < session.wi) mark = session.marks[i] === "ok" ? "ok" : "bad";
+          if (hlOn) {
+            if (i === session.wi) mark = "now";
+            else if (!exam && i < session.wi) mark = session.marks[i] === "ok" ? "ok" : "bad";
+          }
           var curCls = words[i].className;
           var newCls = "word" + (mark ? " " + mark : "") + (session.lang === 'en' ? '' : ' devlys');
           if (curCls !== newCls) words[i].className = newCls;
@@ -1741,53 +1764,7 @@
     return true;
   }
   function patchLock() {
-    if (session.exam || (session.lesson && session.lesson.stage === "para")) return patchMock();
-    var stage = document.querySelector("#run .stage");
-    if (!stage) return false;
-    var line = stage.querySelector(".line");
-    if (!line) return false;
-    var boxes = line.querySelectorAll(".box");
-    if (boxes.length !== session.words.length) {
-      var top = stage.scrollTop;
-      stage.innerHTML = lockHTML();
-      stage.scrollTop = top;
-      return true;
-    }
-    var box = boxes[session.wi];
-    if (!box) return false;
-    var nows = line.querySelectorAll(".box.now");
-    if (nows.length === 1 && nows[0] === box && box.querySelector(".caret")) {
-      applyLockBox(box);
-      syncFix();
-      return true;
-    }
-    for (var n = 0; n < nows.length; n++) {
-      var oldBox = nows[n];
-      if (oldBox !== box) {
-        var oldWi = -1;
-        for (var b = 0; b < boxes.length; b++) {
-          if (boxes[b] === oldBox) { oldWi = b; break; }
-        }
-        if (oldWi >= 0) {
-          var mark = oldWi < session.wi ? (session.marks[oldWi] === "ok" ? "done" : "bad") : "ahead";
-          var oldW = session.words[oldWi];
-          var oldLegacy = oldW && oldW.k != null && session.lang !== "en";
-          var oldShown = oldLegacy ? oldW.k : (oldW ? oldW.h : "");
-          oldBox.className = "box " + mark + (oldLegacy ? " devlys" : "");
-          oldBox.textContent = oldShown;
-        }
-      }
-    }
-    if (!box.querySelector(".caret")) {
-      var curW = session.words[session.wi];
-      var curLegacy = curW && curW.k != null && session.lang !== "en";
-      var curShown = curLegacy ? curW.k : (curW ? curW.h : "");
-      box.className = "box now" + (curLegacy ? " devlys" : "");
-      box.innerHTML = '<span class="ink">' + esc(curShown) + '</span><span class="over" aria-hidden="true">' + esc(curShown) + '</span><span class="caret" data-at="0"></span>';
-    }
-    applyLockBox(box);
-    syncFix();
-    return true;
+    return patchMock();
   }
   function paintKeyFace(el, showShift) {
     if (!el) return;
@@ -1931,7 +1908,7 @@
       var passage = mock.querySelector(".passage");
       var typedLine = mock.querySelector(".typed-line");
       if (passage) {
-        var pNow = passage.querySelector(".word.now");
+        var pNow = passage.querySelector('.word[data-wi="' + session.wi + '"]') || passage.querySelector(".word.now");
         scrollIntoContainerView(passage, pNow);
       }
       if (typedLine) {
@@ -2244,59 +2221,49 @@
     return html + "</div>";
   }
   function lockHTML() {
-    if (session.exam || (session.lesson && session.lesson.stage === "para")) return mockHTML();
-    var flash = session.flash && (performance.now() - session.flash < 220);
-    var html = '<div class="line' + (session.lang === "en" ? " en" : "") + '">';
-    session.words.forEach(function (w, i) {
-      var state = "wait";
-      if (i < session.wi) state = session.marks[i] === "ok" ? "done" : "bad";
-      if (i === session.wi) state = "now";
-      var formed = "";
-      var wait = false;
-      if (state === "now" && session.typed) {
-        if (session.lang === "en") formed = session.typed;
-        else {
-          var live = KD.liveForm(session.typed);
-          var text = live.text || "";
-          var onPath = (w.k || "").indexOf(session.typed) === 0;
-          if (text && w.h.indexOf(text) === 0) {
-            formed = text;
-            wait = !!live.wait;
-          } else if (!onPath && text) {
-            formed = text;
-          }
-        }
-      }
-      html += boxHTML(state, w.h, formed, flash, wait, w.k, session.typed);
-    });
-    html += "</div>";
-    if (session.showFix && session.lastFix) html += '<div class="fix">' + esc(session.lastFix) + "</div>";
-    return html;
+    return mockHTML();
+  }
+  function isPassageHighlightEnabled() {
+    return !!(store.settings && store.settings.passageHighlight === true);
+  }
+  function isLiveWordColorEnabled() {
+    return !!(store.settings && store.settings.liveWordColor === true);
   }
   function mockHTML() {
     var exam = !!session.exam;
     var cls = session.lang === "en" ? " en" : "";
     var master = "";
+    var hlOn = isPassageHighlightEnabled();
     session.words.forEach(function (w, i) {
       var c = "";
-      if (i === session.wi) c = "now";
-      else if (!exam && i < session.wi) c = session.marks[i] === "ok" ? "ok" : "bad";
-      master += '<span class="word ' + c + (session.lang === 'en' ? '' : ' devlys') + '" aria-label="' + esc(w.h) + '">' + esc(session.lang === 'en' ? w.h : w.k) + "</span> ";
+      if (hlOn) {
+        if (i === session.wi) c = "now";
+        else if (!exam && i < session.wi) c = session.marks[i] === "ok" ? "ok" : "bad";
+      }
+      master += '<span class="word' + (c ? ' ' + c : '') + (session.lang === 'en' ? '' : ' devlys') + '" data-wi="' + i + '" aria-label="' + esc(w.h) + '">' + esc(session.lang === 'en' ? w.h : w.k) + "</span> ";
     });
     var hideBottom = !!(store.settings && store.settings.hideBottomBox);
+    var showColor = isLiveWordColorEnabled();
     return '<div class="mock' + (hideBottom ? ' hide-bottom' : '') + '"' + (hideBottom ? ' style="grid-template-rows: 1fr !important;"' : '') + '">' +
-      '<div class="mock-pane mock-master"' + (hideBottom ? ' style="height: 100% !important;"' : '') + '><div class="mock-k"><span>Master Passage (मूल पाठ)' + (hideBottom ? ' <span class="mock-blind-badge">Blind Drill</span>' : '<span class="mock-blind-badge" style="display:none;">Blind Drill</span>') + '</span><div class="mock-k-right"><button type="button" class="mock-blind-btn' + (hideBottom ? ' active' : '') + '" data-act="toggle-hide-bottom" title="' + (hideBottom ? 'Show typing area below' : 'Hide typing area to train looking only at master passage') + '">' + icon(hideBottom ? 'eyeOff' : 'eye') + '<span>' + (hideBottom ? 'Show Bottom Box' : 'Hide Bottom Box') + '</span></button><span class="mock-count">' + (session.words ? session.words.length + ' words' : '') + '</span></div></div><div class="passage' + cls + '">' + master + '</div></div>' +
-      '<div class="mock-pane mock-type"' + (hideBottom ? ' style="display: none !important;"' : '') + '><div class="mock-k"><span>Typing Area (टाइपिंग क्षेत्र)</span><div class="mock-k-right"><button type="button" class="mock-blind-btn" data-act="toggle-hide-bottom" title="Hide typing area (Blind drill)">' + icon('eyeOff') + '<span>Hide Box</span></button><span class="mock-count">Word ' + Math.min(session.wi + 1, session.words.length) + ' of ' + session.words.length + '</span></div></div><div class="typed-line' + cls + '">' + typedLineInner() + '</div></div>' +
+      '<div class="mock-pane mock-master"' + (hideBottom ? ' style="height: 100% !important;"' : '') + '><div class="mock-k"><span>Master Passage (मूल पाठ)' + (hideBottom ? ' <span class="mock-blind-badge">Blind Drill</span>' : '<span class="mock-blind-badge" style="display:none;">Blind Drill</span>') + (exam ? ' <span class="mock-exam-badge">RSSB Exam</span>' : '') + '</span><div class="mock-k-right">' +
+      '<button type="button" class="mock-blind-btn' + (hlOn ? ' active' : '') + '" data-act="toggle-passage-highlight" title="' + (hlOn ? 'Passage highlight is ON. Click to switch to Real Exam mode (no highlight).' : 'Passage highlight is OFF (Real Exam mode). Click to turn on training highlight.') + '">' + (hlOn ? icon('eye') : icon('eyeOff')) + '<span>' + (hlOn ? 'Passage Highlight: ON' : 'Passage Highlight: OFF (RSSB Exam)') + '</span></button>' +
+      '<button type="button" class="mock-blind-btn' + (hideBottom ? ' active' : '') + '" data-act="toggle-hide-bottom" title="' + (hideBottom ? 'Show typing area below' : 'Hide typing area to train looking only at master passage') + '">' + icon(hideBottom ? 'eyeOff' : 'eye') + '<span>' + (hideBottom ? 'Show Bottom Box' : 'Hide Bottom Box') + '</span></button><span class="mock-count">' + (session.words ? session.words.length + ' words' : '') + '</span></div></div><div class="passage' + cls + (hlOn ? ' show-highlight' : ' no-highlight') + '">' + master + '</div></div>' +
+      '<div class="mock-pane mock-type"' + (hideBottom ? ' style="display: none !important;"' : '') + '><div class="mock-k"><span>Typing Area (टाइपिंग क्षेत्र)</span><div class="mock-k-right"><button type="button" class="mock-blind-btn" data-act="toggle-hide-bottom" title="Hide typing area (Blind drill)">' + icon('eyeOff') + '<span>Hide Box</span></button><span class="mock-count">Word ' + Math.min(session.wi + 1, session.words.length) + ' of ' + session.words.length + '</span></div></div><div class="typed-line' + cls + (showColor ? ' show-live-colors' : ' plain-text') + '">' + typedLineInner() + '</div></div>' +
       (session.showFix && session.lastFix ? '<div class="fix">' + esc(session.lastFix) + "</div>" : "") +
       "</div>";
   }
   function typedLineInner() {
     var typed = "";
     var snaps = session.typedWords || [];
+    var showColor = isLiveWordColorEnabled();
     for (var i = 0; i < session.wi; i++) {
       var snap = snaps[i];
       var text = snap ? snap.text : session.words[i].h;
-      typed += '<span class="word ' + (session.marks[i] === "ok" ? "ok" : "bad") + (session.lang === 'en' ? '' : ' devlys') + '">' + esc(session.lang === 'en' ? text : (snap && snap.raw != null ? snap.raw : session.words[i].k)) + "</span> ";
+      var markClass = "";
+      if (showColor) {
+        markClass = session.marks[i] === "ok" ? " ok" : " bad";
+      }
+      typed += '<span class="word' + markClass + (session.lang === 'en' ? '' : ' devlys') + '" data-wi="' + i + '">' + esc(session.lang === 'en' ? text : (snap && snap.raw != null ? snap.raw : session.words[i].k)) + "</span> ";
     }
     typed += '<span class="word now' + (session.lang === 'en' ? '' : ' devlys') + '" data-wi="' + session.wi + '">' + esc(session.typed || "") + "</span>";
     return typed;
@@ -3535,6 +3502,15 @@
       } else {
         paintShell();
       }
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      return;
+    }
+    if (name === 'toggle-passage-highlight') {
+      var nextVal = !isPassageHighlightEnabled();
+      store.settings = store.settings || {};
+      store.settings.passageHighlight = nextVal;
+      save();
+      paint();
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       return;
     }

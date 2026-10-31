@@ -540,6 +540,9 @@ body.fit.mock-mode .mock-pane .typed-line {
   padding-right: 6px !important;
   word-break: break-word !important;
   scroll-behavior: smooth;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  cursor: default !important;
 }
 
 body.fit.exam-mode .mock-pane .passage.en,
@@ -550,13 +553,94 @@ body.fit.mock-mode .mock-pane .typed-line.en {
   font-size: 21px !important;
 }
 
-.typed-line .word.now {
+/* Strict Real RSSB Exam Mode: Typing Area Everywhere by Default */
+.typed-line .word.now,
+.mock-pane .typed-line .word.now {
+  background: transparent !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  padding: 0 1px !important;
+  color: #0f172a !important;
+}
+
+/* Realistic Blinking Cursor in typing area everywhere (| caret) */
+.typed-line .word.now::after,
+.mock-pane .typed-line .word.now::after {
+  content: "" !important;
+  display: inline-block !important;
+  width: 2px !important;
+  height: 1.15em !important;
+  background: #0f172a !important;
+  vertical-align: -2px !important;
+  margin-left: 1px !important;
+  animation: caret 1s steps(1) infinite !important;
+}
+
+/* No live green/red coloring anywhere by default */
+.typed-line .word,
+.mock-pane .typed-line .word {
+  border-radius: 0 !important;
+  padding: 0 1px !important;
+  color: #0f172a !important;
+  background: transparent !important;
+  text-decoration: none !important;
+}
+.typed-line .word.ok,
+.typed-line .word.bad,
+.mock-pane .typed-line .word.ok,
+.mock-pane .typed-line .word.bad {
+  color: #0f172a !important;
+  background: transparent !important;
+  text-decoration: none !important;
+}
+
+/* Master passage: No highlight on current word anywhere by default */
+.passage .word.now,
+.mock-master .passage .word.now,
+.mock-pane .passage .word.now {
+  background: transparent !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+}
+.passage .word,
+.mock-master .passage .word,
+.mock-pane .passage .word {
+  background: transparent !important;
+  color: inherit !important;
+}
+
+/* Single-line token drills (.box): Real vertical blinking cursor everywhere */
+.box .caret,
+.box.now .caret {
+  display: inline-block !important;
+  width: 2px !important;
+  height: 1.15em !important;
+  border: none !important;
+  background: #0f172a !important;
+  vertical-align: -0.15em !important;
+  animation: caret 1s steps(1) infinite !important;
+}
+.box.done,
+.box.bad,
+.box.now .over,
+.box.now.typed .ink {
+  background: transparent !important;
+  color: #0f172a !important;
+}
+.box.now {
+  color: #0f172a !important;
+  outline: none !important;
+}
+
+/* Training mode when live colors explicitly enabled in settings */
+.typed-line.show-live-colors .word.now {
   background: #fef08a !important;
   outline: 2px solid #eab308 !important;
   border-radius: 3px !important;
 }
 
-.typed-line .word.now::after {
+.typed-line.show-live-colors .word.now::after {
   content: "";
   display: inline-block;
   width: 2px;
@@ -565,6 +649,38 @@ body.fit.mock-mode .mock-pane .typed-line.en {
   vertical-align: -2px;
   margin-left: 3px;
   animation: caret 0.9s infinite;
+}
+
+.typed-line.show-live-colors .word.ok {
+  color: #1b7a46 !important;
+  background: #e5f6ec !important;
+}
+
+.typed-line.show-live-colors .word.bad {
+  color: #a61b16 !important;
+  background: #fdeceb !important;
+  text-decoration: underline !important;
+}
+
+.passage.show-highlight .word.now {
+  background: #fff1d6 !important;
+  outline: 2px solid var(--saffron) !important;
+  border-radius: 3px !important;
+}
+
+.mock-exam-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-left: 8px !important;
+  padding: 1px 7px !important;
+  border-radius: 999px !important;
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  border: 1px solid #bae6fd !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
 }
 
 .mock-pane .passage::-webkit-scrollbar,
