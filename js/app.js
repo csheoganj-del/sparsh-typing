@@ -596,6 +596,7 @@
       '<button data-act="toggle-unlock">' + (store.unlockedAll ? 'Use sequential lessons' : 'Allow all lessons') + '</button></div></details></nav>' +
       '<nav class="account-nav" aria-label="Account menu">' + cloudStatusHTML() + '<span class="nav-language h" lang="hi">हिन्दी</span>' +
       '<button class="nav-link" data-act="export-json" title="Download your progress backup">Save Progress</button>' +
+      '<button class="nav-link" data-act="import-json" title="Restore previous progress from JSON backup">Restore Progress</button>' +
       (authToken ? '<span class="nav-user">' + esc(currentUser) + '</span><button class="nav-link" data-act="logout">Log out</button>' : '<button class="nav-link" data-act="open-auth">Login</button>') +
       '</nav>' + (extra || '') + '</div></header>' + (showAuthModal ? authModalHTML() : '');
   }
@@ -3816,6 +3817,29 @@
       exportBackup();
       return;
     }
+    if (name === "import-json") {
+      var fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = ".json,application/json";
+      fileInput.onchange = function (ev) {
+        var file = ev.target.files && ev.target.files[0];
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function (fe) {
+          try {
+            var data = fe.target.result;
+            adoptFile(data);
+            showToast("✔ Previous progress restored successfully!");
+            draw();
+          } catch (ex) {
+            alert("Could not restore backup: " + ex.message);
+          }
+        };
+        reader.readAsText(file);
+      };
+      fileInput.click();
+      return;
+    }
     if (name === "live-restart") {
       startLive("restart");
       return;
@@ -4179,11 +4203,27 @@
       show();
     }).catch(function (err) {
       clearTimeout(timer);
-      if (authToken) {
-        folderSave = true;
-        if (!noteCloudPause(err)) { syncStatus('Saved on this device · cloud save pending'); save(true); }
-      } else folderSave = false;
-      show();
+      if (!progressWork(store)) {
+        fetch("progress/sparsh-rssb-v1.json").then(function (res) {
+          if (!res.ok) throw new Error("no static progress");
+          return res.text();
+        }).then(function (staticText) {
+          adoptFile(staticText);
+          syncStatus("Saved on this device");
+          show();
+        }).catch(function () {
+          fallbackShow();
+        });
+        return;
+      }
+      fallbackShow();
+      function fallbackShow() {
+        if (authToken) {
+          folderSave = true;
+          if (!noteCloudPause(err)) { syncStatus('Saved on this device · cloud save pending'); save(true); }
+        } else folderSave = false;
+        show();
+      }
     });
   })();
   document.fonts.load('24px "RSSB DevLys 010"').then(function (fonts) {
