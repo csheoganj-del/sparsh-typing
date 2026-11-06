@@ -196,6 +196,10 @@ var server = http.createServer(function (req, res) {
     var coachHandler = require("./api/coach");
     return coachHandler(req, res);
   }
+  if (url === "/api/dynamic-passage") {
+    var passageHandler = require("./api/passage");
+    return passageHandler(req, res);
+  }
   if (url === '/api/sentences') return require('./api/sentences')(req,res);
   if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "method");
   var rel = decodeURIComponent(url);

@@ -97,6 +97,18 @@ assert.equal(KD.starBars({ live: { past: [{ ...cleanTarget, realAcc: undefined }
 assert.equal(KD.starBars({ live: { past: [{ ...cleanTarget, realAcc: 97 }] } }).high, 32);
 assert.equal(KD.starBars({ live: { past: [{ pattern: 'history', stars: 5, high: 32 }] } }).high, 34, 'Existing five-star progression must survive');
 assert.equal(KD.starBars({ live: { past: [{ ...cleanTarget, high: 50, wpm: 51 }] } }).high, 50);
+assert.equal(KD.starBars({ live: { past: [
+  { pattern: 'history', stars: 4, high: 42, wpm: 39, acc: 97, realAcc: 97 },
+  { pattern: 'history', stars: 3, high: 40, wpm: 34, acc: 94, realAcc: 95 }
+] } }).high, 42, 'Replaying an older lower bar must not drop the current bar');
+assert.equal(KD.starBars({ live: { past: [
+  { pattern: 'history', stars: 5, high: 40, wpm: 41, acc: 99, realAcc: 99 },
+  { pattern: 'history', stars: 3, high: 32, wpm: 30, acc: 90, realAcc: 90 }
+] } }).high, 42, 'Clearing the highest bar still raises the next bar');
+assert.equal(KD.starBars({ live: { past: [
+  { pattern: 'history', stars: 5, high: 40, wpm: 41, acc: 99, realAcc: 99 },
+  { pattern: 'history', stars: 3, high: 40, wpm: 34, acc: 94, realAcc: 95 }
+] } }).high, 40, 'A newer miss at the same bar holds the bar');
 
 // Isolate the HTTP contract from storage providers and user records.
 const dbPath = require.resolve('../api/_db');

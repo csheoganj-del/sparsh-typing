@@ -26,6 +26,15 @@ assert(plan.targets.length >= 4 && plan.targets.length <= 6);
 assert.equal(KD.adaptivePlan(checks(fullStore(), [33, 33, 33, 33])).plateau, false, 'Four checks do not establish a plateau');
 assert.equal(KD.adaptivePlan(checks(fullStore(), [29, 30, 32, 33, 35, 37])).plateau, false, 'A clear upward trend is not a plateau');
 assert(KD.adaptivePlan(checks(fullStore(), [49, 49, 49, 49, 49])).targetWpm <= 50);
+const historyHeavy = fullStore();
+historyHeavy.log = Array.from({ length: 40 }, (_, i) => ({ at: now - (80 - i) * 86400000, wpm: 20, acc: 100, ms: 60000, id: 'old-' + i }));
+historyHeavy.live.past = [36, 38, 40, 37, 39, 38, 41, 37].map((wpm, i) => ({
+  at: now - (8 - i) * 3600000, id: 'hist-' + i, pattern: 'history', ms: 50000, wpm, acc: 99, realAcc: 99,
+  words: ['यह', 'काम', 'पूरा', 'था।'], sentenceIds: ['fresh-' + i]
+}));
+const heavyPlan = KD.adaptivePlan(historyHeavy);
+assert.equal(heavyPlan.baselineWpm, 38, 'Recent lessons set the pace');
+assert(KD.cumulativeSpeed(historyHeavy) < 25, 'The lifetime average still includes the slow early lessons');
 
 const clean = fullStore();
 clean.profile = { keys: { KeyD: profileRow(300), KeyF: profileRow(300), KeyJ: profileRow(300), KeyK: profileRow(300) }, pairs: {} };

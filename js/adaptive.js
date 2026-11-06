@@ -178,8 +178,8 @@
       return targets.length >= 4;
     });
     var runs = recentRuns(store), rows = runs.rows, speeds = rows.map(function (row) { return row.wpm; });
-    var agg = KD.cumulativeSpeed(store);
-    var baseline = agg != null ? agg : (speeds.length ? median(speeds) : null);
+    /* Lifetime average counts every slow early lesson. Recent runs set the pace. */
+    var baseline = speeds.length ? median(speeds) : KD.cumulativeSpeed(store);
     var accuracies = rows.map(function (row) { return row.accuracy; }).filter(function (value) { return value != null; });
     var sampleCount = keyAccuracy.reduce(function (sum, row) { return sum + row.n; }, 0);
     var firstTry = accuracies.length ? median(accuracies) : sampleCount ? keyAccuracy.reduce(function (sum, row) { return sum + row.n * row.accuracy; }, 0) / sampleCount : null;
@@ -191,7 +191,7 @@
     var focus = firstTry != null && firstTry < 98 ? 'accuracy' : candidates.length ? 'rhythm' : 'variety';
     var target = baseline == null ? null : Math.max(3, Math.min(50, focus === 'accuracy' ? Math.round(baseline * 0.97) : Math.floor(baseline + (plateau ? 1 : 2))));
     var measured = 'practice runs';
-    var note = baseline == null ? 'Complete your first practice to establish your aggregate speed. Practise familiar combinations with clean first presses.' :
+    var note = baseline == null ? 'Complete your first practice to establish your speed. Practise familiar combinations with clean first presses.' :
       (plateau ? 'Your last ' + comparable.length + ' ' + measured + ' are near ' + Math.round(baseline) + ' WPM. ' : 'Recent ' + measured + ' are near ' + Math.round(baseline) + ' WPM. ') +
       (focus === 'accuracy' ? 'Aim for 98% first-try accuracy near ' + target + ' WPM before adding speed.' : 'Rotate combinations, then try ' + target + ' WPM with at least 98% first-try accuracy.');
     return { note: note, allowed: allowed, targets: targets, retiredKeys: retired,
@@ -367,6 +367,6 @@
       goalReached: lastThree.length === 3 && lastThree.every(function (row) { return row.wpm >= goal && row.acc >= 98 && row.realAcc >= 98; }),
       qualifyingChecks: lastThree.filter(function (row) { return row.wpm >= goal && row.acc >= 98 && row.realAcc >= 98; }).length,
       note: 'The ' + duration + '-day calendar is a practice plan, not a prediction. Checkpoints rise 2 WPM at a time from the measured check, and the end date is not a promise of the goal. ' +
-        (estimated ? 'The starting ' + Math.round(baseline) + ' WPM is an estimate until your first typing sessions are recorded.' : 'Every practice session across all your devices builds your aggregate speed toward ' + goal + ' WPM.') };
+        (estimated ? 'The starting ' + Math.round(baseline) + ' WPM is an estimate until your first typing sessions are recorded.' : 'Your pace follows recent practice. The ' + goal + ' WPM goal still needs three clean two-minute passages.') };
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

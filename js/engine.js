@@ -174,13 +174,19 @@
       return { min: min, mid: mid, high: high, acc: acc };
     }
     var past = store && store.live && Array.isArray(store.live.past) ? store.live.past : [];
-    var last = null;
-    for (var i = past.length - 1; i >= 0; i--) {
-      if (past[i] && past[i].pattern === "history" && past[i].high) { last = past[i]; break; }
+    /* A replay of an older lesson stores a lower bar later in the list.
+       That row must not pull the current bar backward. */
+    var bestHigh = 0;
+    var latestAtBest = null;
+    for (var i = 0; i < past.length; i++) {
+      var row = past[i];
+      if (!row || row.pattern !== "history" || !(Number(row.high) > 0)) continue;
+      var rowHigh = Number(row.high);
+      if (rowHigh >= bestHigh) { bestHigh = rowHigh; latestAtBest = row; }
     }
-    if (last) {
-      var cleanGoal = Number(last.wpm) >= Number(last.high) && Number(last.acc) >= 98 && Number(last.realAcc) >= 98;
-      return pack((last.stars || 0) >= 5 || cleanGoal ? Number(last.high) + 2 : Number(last.high));
+    if (latestAtBest) {
+      var cleanGoal = Number(latestAtBest.wpm) >= bestHigh && Number(latestAtBest.acc) >= 98 && Number(latestAtBest.realAcc) >= 98;
+      return pack((latestAtBest.stars || 0) >= 5 || cleanGoal ? bestHigh + 2 : bestHigh);
     }
     var speeds = KD.recentSpeeds(store);
     if (!speeds.length) return { min: floorMin, mid: floorMid, high: floorHigh, acc: acc };
@@ -193,6 +199,46 @@
   KD.keyWpm = function (keys, ms) {
     if (!ms || ms < 400) return 0;
     return (keys / 5) / (ms / 60000);
+  };
+
+  /* Live coach. Recent presses only: a clean fast run is confidence,
+     a miss is a slip, and a long gap is doubt. */
+  KD.listenLive = function (log, surePace) {
+    var recent = Array.isArray(log) ? log.slice(-16) : [];
+    surePace = Math.max(20, Math.min(80, Number(surePace) || 36));
+    if (recent.length < 8) {
+      return { state: "listen", wpm: 0, first: 100, line: "I'm listening. Type the first words at a sure pace." };
+    }
+    var firstHits = 0;
+    var gaps = [];
+    var hotSlip = false;
+    recent.forEach(function (row, index) {
+      if (!row) return;
+      if (row.first) firstHits++;
+      if (row.ok && row.ms >= 40 && row.ms <= 2500) gaps.push(row.ms);
+      if (index >= recent.length - 6 && (!row.ok || !row.first)) hotSlip = true;
+    });
+    var first = Math.round(firstHits / recent.length * 100);
+    var gapSum = gaps.reduce(function (sum, ms) { return sum + ms; }, 0);
+    var wpm = gapSum ? KD.keyWpm(gaps.length, gapSum) : 0;
+    var ordered = gaps.slice().sort(function (a, b) { return a - b; });
+    var mid = ordered.length ? ordered[Math.floor(ordered.length / 2)] : 0;
+    var state = "sure";
+    var line = "This is the confident pace. Hold it.";
+    if (hotSlip) {
+      state = "slip";
+      line = "A miss just now. Finish this word cleanly. Speed can wait.";
+    } else if (first < 98) {
+      state = "slip";
+      line = "First try is under 98%. Stay with the clean press.";
+    } else if (mid >= 480) {
+      state = "doubt";
+      line = "The pause is the doubt. See the whole word, then type it.";
+    } else if (wpm < surePace - 6) {
+      state = "careful";
+      line = "Clean, and a little careful. You can stay here.";
+    }
+    return { state: state, wpm: Math.round(wpm * 10) / 10, first: first, line: line };
   };
 
   /* Per-lesson attempts. The tape is the playback. Caps keep localStorage small. */

@@ -746,17 +746,17 @@
     var fullChecks = (state.attempts || []).filter(function (row) { return row && row.full && !row.guided && row.ms >= 120000 && row.wpm > 0; });
     var lastFull = fullChecks.length ? fullChecks[fullChecks.length - 1] : null;
     var aggSpeed = KD.cumulativeSpeed(store);
-    var shownWpm = aggSpeed != null ? aggSpeed : (lastFull ? lastFull.wpm : null);
-    var shownLabel = 'Aggregate speed';
+    var shownWpm = plan.baselineWpm != null ? plan.baselineWpm : (aggSpeed != null ? aggSpeed : (lastFull ? lastFull.wpm : null));
+    var shownLabel = plan.baselineWpm != null ? 'Recent speed' : (aggSpeed != null ? 'All-time average' : 'Last check');
     var goalWpm = program.goalWpm || 50;
     var weakNames = offer && offer.names && offer.names.length ? offer.names.join(', ') : 'your recent misses';
-    return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span>' + (lastFull ? '<small title="Last two-minute check">2-min check: ' + fmt(lastFull.wpm) + ' WPM</small>' : '') + '</div></div>' +
+    return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span>' + (lastFull ? '<small title="Last two-minute check">2-min check: ' + fmt(lastFull.wpm) + ' WPM</small>' : '') + (aggSpeed != null && plan.baselineWpm != null ? '<small title="Average of every saved attempt">All-time average: ' + fmt(aggSpeed) + ' WPM</small>' : '') + '</div></div>' +
       '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Practice window ends ' + esc(program.endDate) + '</p>' +
       '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
-      '<div><b>2. Practise your combinations</b><p>Recent errors choose the drill, with extra attention to ' + esc(weakNames) + '. A wrong Space locks the word on the exam.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="para">Word-lock transfer</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
+      '<div><b>2. Practise your combinations</b><p>Recent errors choose the drill, with extra attention to ' + esc(weakNames) + '. A wrong Space locks the word on the exam.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="para" title="Fetch fresh unseen paragraph">Word-lock transfer</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic from internet or news">🌐 Choose Topic</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
       '<div><b>3. Speed Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div>' +
       '<div><b>4. RSSB Exam Simulation</b><p>Real exam scenario: 400 words on Rajasthan geography, culture & ecology. DevLys 010. Space locks word. 25 Marks (Cutoff: 9/25).</p><button class="btn primary" data-act="exam-hi">10-Min Full Exam</button><button class="btn ghost" data-act="exam-hi-5min">5-Min Mini Exam</button>' + (store.bestHi ? '<p class="small muted" style="margin-top:6px;">Best: <b>' + fmt(store.bestHi.marks) + ' / 25 Marks</b> (' + store.bestHi.correct + ' correct)</p>' : '') + '</div></div>' +
-      '<p class="small muted">' + (program.today.recordedMinutes || 0) + ' recorded practice minutes today across all devices. Goal: 98% first-try accuracy building toward ' + goalWpm + ' WPM aggregate speed.</p>' +
+      '<p class="small muted">' + (program.today.recordedMinutes || 0) + ' recorded practice minutes today across all devices. Goal: 98% first-try accuracy on fresh passages, building toward ' + goalWpm + ' WPM.</p>' +
       '<details class="training-plan" open><summary>Your daily routine · about ' + program.totalMinutes + ' minutes including breaks</summary><div class="training-blocks">' + program.blocks.map(function (block) { return '<div><b>' + esc(block.title) + ' · ' + block.minutes + ' min</b><p>' + esc(block.detail) + '</p></div>'; }).join('') + '</div><p class="small muted">Take a two-minute break between blocks. You can split the blocks between morning and evening. Keep the same DevLys keyboard mapping when you switch devices.</p></details>' +
       '<details class="training-plan"><summary>Your 20-day checkpoints</summary><p class="small muted">' + esc(program.note) + '</p><div class="training-checkpoints">' + program.milestones.map(function (m) { return '<span>Day ' + m.day + '<b>' + m.targetWpm + ' WPM</b><small>' + esc(m.date) + '</small></span>'; }).join('') + '</div><p class="small muted">Stable finger-to-key mapping, preparing the next keystroke, and small hand movements guide the technique practice. <a href="https://userinterfaces.aalto.fi/how-we-type/" target="_blank" rel="noopener">Typing research</a>. The exact daily routine is a practice plan, not a proven deadline for reaching ' + goalWpm + ' WPM.</p></details>' +
       (state.attempts.length ? '<details><summary>Recent speed checks</summary><table class="practice40-history"><thead><tr><th>Date</th><th>Practice</th><th>WPM</th><th>First try</th></tr></thead><tbody>' + state.attempts.slice(-7).reverse().map(function (r) { return '<tr><td>' + esc(new Date(r.at).toLocaleDateString('en-IN')) + '</td><td>' + (r.full ? 'Passage' : 'Familiar keys') + (r.guided ? ' · guided' : '') + '</td><td>' + fmt(r.wpm) + '</td><td>' + Math.round(r.realAcc) + '%</td></tr>'; }).join('') + '</tbody></table></details>' : '') + '</section>';
@@ -783,9 +783,9 @@
     var goal = timed && session.practice40.full && !session.practice40.guided && r.wpm >= targetGoal && r.realAcc >= 98 && r.acc >= 98;
     var state = KD.practice40State(store);
     return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi · ' + targetGoal + ' WPM practice</div><h1>' + (goal ? targetGoal + ' WPM with clean typing' : r.realAcc < 98 ? 'Build accuracy first' : 'Keep building your rhythm') + '</h1>' +
-      '<div class="dials">' + dialHTML('Correct key WPM', fmt(r.wpm), Math.min(100, r.wpm / targetGoal * 100), false) + dialHTML('First-try accuracy', Math.round(r.realAcc) + '%', r.realAcc, false) + dialHTML('Time', dur(r.ms), 0, true) + '</div>' +
+      rssbScorecardHTML(r, session) +
       '<p>' + (session.practice40.full ? 'Fresh Hindi passage' : 'Familiar-key practice; full Hindi passage speed is not measured yet') + (session.practice40.guided ? ' · guidance used.' : '.') + '</p><p>' + (!timed ? 'Finish a full two-minute check to save a speed result.' : state.reached ? 'You have repeated the goal on three fresh passages. Keep practising new text.' : 'Repeat the goal on three fresh passages with at least 98% first-try accuracy. Correcting mistakes helps final accuracy, but does not erase first-try mistakes.') + '</p>' +
-      '<div class="row-btns"><button class="btn primary" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="para">Word-lock transfer</button><button class="btn" data-act="practice40-check">New speed check</button><button class="btn" data-act="exam-hi">10-minute Hindi exam</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
+      '<div class="row-btns"><button class="btn primary" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="para" title="Fetch fresh unseen paragraph">Word-lock transfer (New Topic)</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic from internet or news">🌐 Choose Topic</button><button class="btn" data-act="practice40-check">New speed check</button><button class="btn" data-act="exam-hi">10-minute Hindi exam</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
   }
   function pathHTML() { return homeHTML(); }
 
@@ -827,7 +827,9 @@
     var acc = recent.length ? recent.reduce(function (sum, row) { return sum + (row.acc || 0); }, 0) / recent.length : 0;
     var aggSpeed = KD.cumulativeSpeed(store);
     var aggStats = KD.aggregateStats ? KD.aggregateStats(store) : null;
-    var displaySpeed = aggSpeed != null ? aggSpeed : (profileSpeed || speed);
+    var recentSpeed = KD.adaptivePlan ? KD.adaptivePlan(store).baselineWpm : null;
+    var displaySpeed = recentSpeed != null ? recentSpeed : (aggSpeed != null ? aggSpeed : (profileSpeed || speed));
+    var speedLabel = recentSpeed != null ? 'Recent speed' : (aggSpeed != null ? 'All-time average' : (profileSpeed ? 'Profile speed' : 'Recent speed'));
     var seconds = aggStats ? aggStats.minutes * 60000 : attempts.reduce(function (sum, row) { return sum + (row.ms || 0); }, 0);
     var covered = {};
     Object.keys(store.touch.keys || {}).forEach(function (id) { var code = id.replace(/\+S$/, ''); if (KD.BY_CODE[code]) covered[code] = true; });
@@ -852,7 +854,8 @@
       var wpm = n && total ? 12000 / (total / n) : 0;
       return '<div class="finger-stat"><span>' + esc(KD.FINGERS[id].name) + '</span><div class="stat-track"><i style="width:' + Math.min(100, wpm) + '%"></i></div><b>' + (n >= 4 ? fmt(wpm) + ' WPM' : '—') + '</b></div>';
     }).join('');
-    return '<main id="main-content" class="wrap narrow stats-page" tabindex="-1"><section class="card"><h3>Speed</h3><div class="overall-speed"><span>' + (aggSpeed != null ? 'Aggregate speed' : (profileSpeed ? 'Profile speed' : 'Recent speed')) + '</span><div class="stat-track"><i style="width:' + Math.min(100, displaySpeed) + '%"></i></div><b>' + fmt(displaySpeed) + ' WPM</b></div>' +
+    return '<main id="main-content" class="wrap narrow stats-page" tabindex="-1"><section class="card"><h3>Speed</h3><div class="overall-speed"><span>' + speedLabel + '</span><div class="stat-track"><i style="width:' + Math.min(100, displaySpeed) + '%"></i></div><b>' + fmt(displaySpeed) + ' WPM</b></div>' +
+      (aggSpeed != null && recentSpeed != null ? '<p class="small muted">All-time average across ' + (aggStats ? aggStats.attempts : 'every') + ' attempts: ' + fmt(aggSpeed) + ' WPM. Older lessons keep this number near where you started.</p>' : '') +
       '<h3>Accuracy &amp; Coverage</h3><div class="dials">' + dialHTML('Accuracy', recent.length ? Math.round(acc) + '%' : '—', acc, false) + dialHTML('Coverage', coverage + '%', coverage, false) + '</div>' +
       '<div class="practice-time"><span>Recorded typing practice</span><b>' + dur(seconds) + '</b></div><div class="practice-time"><span>Learning new keys</span><b>' + dur(learningMs) + '</b></div></section>' +
       '<section class="card"><h2>Progress Overview</h2><p class="small muted">Your latest recorded attempts.</p>' + (recent.length ? chartBlock(recent) : '<p class="empty-state">Complete a lesson to see your progress.</p>') + '</section>' +
@@ -1100,9 +1103,12 @@
       typed: "",
       marks: [],
       wrong: [],
+      typedWords: [],
+      backspaces: 0,
       tape: [],
       slips: [],
       typedWords: [],
+      backspaces: 0,
       extra: 0,
       fixedLine: fixedLine,
       correct: 0,
@@ -1273,6 +1279,7 @@
       tape: resume && Array.isArray(resume.tape) ? resume.tape.slice() : [],
       slips: resume && Array.isArray(resume.slips) ? resume.slips.slice() : [],
       typedWords: resume && Array.isArray(resume.typedWords) ? resume.typedWords.slice() : [],
+      backspaces: resume ? (resume.backspaces || 0) : 0,
       extra: 0,
       fixedLine: "",
       correct: resume ? (resume.correct || 0) : 0,
@@ -1329,6 +1336,8 @@
       typed: "",
       marks: [],
       wrong: [],
+      typedWords: [],
+      backspaces: 0,
       correct: 0,
       errors: 0,
       t0: null,
@@ -1528,15 +1537,19 @@
       ? '<div><b>' + clock(session.t0 ? remain() : session.limit) + "</b><span>Left</span></div>"
       : '<div><b>' + clock(elapsed()) + "</b><span>Time</span></div>";
     var liveMarks = "";
+    var okw = 0;
     if (session.kind === "lock") {
-      var okw = session.marks.filter(function (m) { return m === "ok"; }).length;
-      if (session.exam) {
-        var mk = session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw);
-        liveMarks = '<div><b>' + fmt(mk) + "</b><span>Marks / 25</span></div>";
-      } else {
-        liveMarks = '<div><b>' + okw + "</b><span>Correct words</span></div>";
+      okw = session.marks.filter(function (m) { return m === "ok"; }).length;
+    } else {
+      var doneTokens = 0;
+      for (var s = 0; s < session.i; s++) {
+        if (session.steps[s] && session.steps[s].ti >= 0) doneTokens = Math.max(doneTokens, session.steps[s].ti + 1);
       }
+      var badCount = session.badTokens ? Object.keys(session.badTokens).filter(function (k) { return !!session.badTokens[k]; }).length : 0;
+      okw = Math.max(0, doneTokens - badCount);
     }
+    var mk = session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw);
+    liveMarks = '<div><b>' + fmt(mk) + "</b><span>Marks / 25</span></div>";
     var banners = "";
     if (session.caps) banners += '<div class="banner bad">Turn Caps Lock off. In Kruti, Shift makes a half letter. Caps Lock breaks the hand habit.</div>';
     if (session.layoutWarn) banners += '<div class="banner bad">Set the Windows keyboard to English (US). Kruti Dev is not a Hindi keyboard.</div>';
@@ -1552,6 +1565,9 @@
       }
     }
     if (session.techniqueWarn) banners += '<div class="banner">' + esc(session.techniqueWarn) + '</div>';
+    if (!session.lesson.scoreFree && session.phase === "run") {
+      banners += '<div id="live-listen" class="live-listen listen" data-state="listen"><b aria-hidden="true">— WPM · 100% first try</b><span aria-live="polite">I\'m listening. Type the first words at a sure pace.</span></div>';
+    }
     var body = session.kind === "exact" ? exactHTML() : lockHTML();
     var pad = "";
     if (next && next.type === "alt") pad = numpadHTML(next.num);
@@ -1576,6 +1592,7 @@
     if (stage) stage.scrollTop = stageScroll;
     revealCurrent();
     placeCaret();
+    paintListen();
   }
 
   /* A key must change the letter before the keyboard, hands, meters, or save run.
@@ -1960,6 +1977,7 @@
   }
   function paintClock() {
     if (!session || session.phase !== "run" || session.paused) return;
+    paintListen();
     var bs = document.querySelectorAll("#run .meters b");
     if (bs.length < 3) return;
     var timeText = session.limit ? clock(session.t0 ? remain() : session.limit) : clock(elapsed());
@@ -1968,11 +1986,51 @@
     if (bs[0].textContent !== timeText) bs[0].textContent = timeText;
     if (bs[1].textContent !== wpm) bs[1].textContent = wpm;
     if (bs[2].textContent !== accText) bs[2].textContent = accText;
-    if (bs[3] && session.kind === "lock") {
+    if (bs[3]) {
       var okw = 0;
-      session.marks.forEach(function (m) { if (m === "ok") okw++; });
-      var fourth = session.exam ? fmt(session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw)) : String(okw);
+      if (session.kind === "lock") {
+        session.marks.forEach(function (m) { if (m === "ok") okw++; });
+      } else {
+        var doneTokens = 0;
+        for (var s = 0; s < session.i; s++) {
+          if (session.steps[s] && session.steps[s].ti >= 0) doneTokens = Math.max(doneTokens, session.steps[s].ti + 1);
+        }
+        var badCount = session.badTokens ? Object.keys(session.badTokens).filter(function (k) { return !!session.badTokens[k]; }).length : 0;
+        okw = Math.max(0, doneTokens - badCount);
+      }
+      var fourth = fmt(session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw));
       if (bs[3].textContent !== fourth) bs[3].textContent = fourth;
+    }
+  }
+  function ensureSurePace() {
+    if (!session || session.surePace) return session && session.surePace;
+    var pace = 36;
+    if (KD.trainingProgram) {
+      var program = KD.trainingProgram(store);
+      if (program && program.nextTargetWpm) pace = program.nextTargetWpm;
+    }
+    session.surePace = pace;
+    return pace;
+  }
+  function noteListen(ok, ms, first) {
+    if (!session || !session.lesson || session.lesson.scoreFree) return;
+    var log = session.listen || (session.listen = []);
+    log.push({ ok: !!ok, ms: Math.max(0, Number(ms) || 0), first: !!ok && first !== false });
+    if (log.length > 30) log.shift();
+    if (session.phase === "run") paintListen();
+  }
+  function paintListen() {
+    var el = document.getElementById("live-listen");
+    if (!el || !KD.listenLive) return;
+    var heard = KD.listenLive(session.listen, ensureSurePace());
+    var nums = (heard.wpm ? fmt(heard.wpm) : "—") + " WPM · " + heard.first + "% first try";
+    var speed = el.querySelector("b");
+    var line = el.querySelector("span");
+    if (speed && speed.textContent !== nums) speed.textContent = nums;
+    if (line && el.getAttribute("data-state") !== heard.state) {
+      el.setAttribute("data-state", heard.state);
+      el.className = "live-listen " + heard.state;
+      line.textContent = heard.line;
     }
   }
 
@@ -2001,7 +2059,15 @@
     var preview = session.kind === "exact" ? exactHTML() : lockHTML();
     var quietKeys = !!(session.practice40 && session.practice40.full) || (session.hints === "none" && (session.exam || (session.lesson && session.lesson.stage === "para")));
     var first = quietKeys ? null : (session.kind === "exact" ? (session.steps[0] || null) : nextLockStep());
+    var isParaOrExam = session.lesson && (session.lesson.id === "para" || /^exam-/.test(session.lesson.id));
+    var dynamicBar = isParaOrExam
+      ? '<div style="margin:12px auto 8px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:600px;">' +
+          '<button class="btn ghost small" data-act="next-dynamic-para" title="Fetch a completely fresh random internet topic" style="border:1px solid var(--accent, #38bdf8);color:var(--accent, #38bdf8);font-size:13px;padding:6px 14px;border-radius:16px;">🎲 नया विषय लोड करें (Fresh Internet Topic)</button>' +
+          '<button class="btn ghost small" data-act="prompt-topic" title="Enter any custom topic (e.g. Chandrayaan, Rajasthan Forts, Cricket, AI)" style="border:1px solid var(--muted, #94a3b8);color:var(--text, #f8fafc);font-size:13px;padding:6px 14px;border-radius:16px;">🌐 मनपसंद विषय टाइप करें (Choose Custom Topic)</button>' +
+        '</div>'
+      : '';
     return '<div class="lesson-ready"><p>' + esc(L.teach || 'Keep your fingers on the home row. Follow the highlighted key.') + '</p>' + (L.source === 'practice-fallback' ? '<p>AI is unavailable. This is a sentence from the practice pool.</p>' : '') + '<p>Keep your computer’s keyboard input on English (US). The practice text uses DevLys 010.</p>' +
+      dynamicBar +
       '<button class="start-typing" id="start-run">Start Typing <span>Press Enter</span></button></div>' +
       teachingSequenceHTML(first) +
       '<div class="stage" style="--drill:' + drillSize() + 'px">' + preview + "</div>" +
@@ -2292,6 +2358,7 @@
 
   function beginRun() {
     session.phase = "run";
+    if (typeof ensureSurePace === "function") ensureSurePace();
     if (session.practice40) { session.practice40.guided = !session.practice40.full; session.t0 = performance.now(); }
     if (session.rhythmBurst) session.t0 = performance.now();
     session.holding = true;
@@ -2326,6 +2393,8 @@
     var dt = prev ? now - prev.t : 0;
     var noted = KD.noteTap(store.touch, prev, id, dt);
     store.touch = noted.touch;
+    var row = session.kind === "exact" && session.measurements ? session.measurements.positions[session.i] : null;
+    noteListen(true, dt, row ? row.first : true);
     session.lastTap = { id: id, t: now, ti: step.ti };
     session.tapN = (session.tapN || 0) + 1;
     if (session.tapN % 12 === 0) saveSoon();
@@ -2346,9 +2415,12 @@
     session.lastActivityAt = performance.now();
   }
   function refreshTokenErrors(ti) {
+    if (ti == null) return;
     session.badTokens = session.badTokens || {};
     var rows = session.measurements && session.measurements.positions || [];
-    session.badTokens[ti] = rows.some(function (row) { return row && row.ti === ti && row.visited && !row.valid; });
+    var hasBad = rows.some(function (row) { return row && row.ti === ti && row.visited && !row.valid; });
+    if (hasBad) session.badTokens[ti] = true;
+    else delete session.badTokens[ti];
   }
   function forgetTiming() {
     if (session) session.lastTap = null;
@@ -2364,6 +2436,7 @@
   }
   function miss(code, info, holdPaint) {
     session.errors++;
+    noteListen(false, 0, false);
     var expected = currentStep();
     recordSkill(expected, false);
     forgetTiming();
@@ -2559,10 +2632,15 @@
     }
     session.handWarn = false;
     if (e.key === 'Backspace') {
+      e.preventDefault();
       if (session.i > 0) {
+        var prevStep = session.steps[session.i - 1];
+        if (prevStep && prevStep.space) return;
+        session.backspaces = (session.backspaces || 0) + 1;
         var previousPosition = session.measurements && session.measurements.positions[session.i - 1];
         if (previousPosition && previousPosition.valid) session.correct = Math.max(0, session.correct - 1);
         recordPosition(step, false, true);
+        noteListen(false, 0, false);
         session.i--;
         refreshTokenErrors(session.steps[session.i].ti);
         forgetTiming(); paintTyping();
@@ -2607,9 +2685,12 @@
     }
     if (e.key === "Backspace") {
       e.preventDefault();
-      if (session.typed.length) session.typed = session.typed.slice(0, -1);
-      forgetTiming();
-      paintTyping();
+      if (session.typed.length > 0) {
+        session.backspaces = (session.backspaces || 0) + 1;
+        session.typed = session.typed.slice(0, -1);
+        forgetTiming();
+        paintTyping();
+      }
       return;
     }
     if (e.code === "Space" || e.key === " " || e.code === "Enter" || e.key === "Enter") {
@@ -2680,6 +2761,16 @@
     var ok;
     if (session.lang === "en") ok = session.typed === word.h;
     else ok = KD.examWordCorrect(session.typed, word.k);
+    if (!ok && session.lang !== "en" && KD.preview && KD.cleanUni) {
+      var renderedGot = KD.cleanUni(KD.preview(session.typed) || "");
+      var renderedWant = KD.cleanUni(word.h || KD.preview(word.k) || "");
+      if (renderedGot && renderedWant && renderedGot === renderedWant) {
+        ok = true;
+      }
+    }
+    if (ok && session.wordMistakes) {
+      delete session.wordMistakes[session.wi];
+    }
     session.marks.push(ok ? "ok" : "bad");
     var got = "";
     if (!session.typedWords) session.typedWords = [];
@@ -2718,6 +2809,7 @@
     session.phase = "done";
     var ms = session.practice40 ? Math.min(session.limit, elapsed()) : elapsed();
     if (session.placement) applyPlacement();
+    var markRate = session.lang === "en" ? 0.05 : 0.0625;
     if (session.kind === "exact") {
       var acc = accuracy();
       var measuredWpm = KD.keyWpm(session.correct, ms);
@@ -2728,14 +2820,39 @@
       if (!session.lesson.scoreFree && session.lesson.id && session.index >= 0) {
         store.stars[session.lesson.id] = Math.max(store.stars[session.lesson.id] || 0, stars);
       }
-      session.result = { kind: "exact", acc: acc, realAcc: realAcc, wpm: wpm, stars: stars, ms: ms };
+      var minutes = Math.max(ms / 60000, 1 / 600);
+      var totalWords = (session.tokens && session.tokens.length) || Math.max(1, Math.round(typedKeys() / 5));
+      var wrongWords = session.badTokens ? Object.keys(session.badTokens).filter(function (k) { return !!session.badTokens[k]; }).length : 0;
+      var correctWords = Math.max(0, totalWords - wrongWords);
+      var netWordRate = correctWords / minutes;
+      var marks = Math.min(25, Math.max(0, netWordRate * 10 * markRate));
+      marks = Math.round(marks * 100) / 100;
+      session.result = {
+        kind: "exact",
+        acc: acc,
+        realAcc: realAcc,
+        wpm: wpm,
+        netWpm: Math.round(netWordRate * 10) / 10,
+        stars: stars,
+        ms: ms,
+        total: totalWords,
+        correct: correctWords,
+        wrong: wrongWords,
+        backspaces: session.backspaces || 0,
+        typedWords: session.typedWords || [],
+        marks: marks,
+        rawMarks: Math.round(correctWords * markRate * 100) / 100
+      };
     } else {
       var okw = session.marks.filter(function (m) { return m === "ok"; }).length;
       var badw = session.marks.length - okw;
-      var marks = session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw);
       var minutes = Math.max(ms / 60000, 1 / 60);
       var wordRate = okw / minutes;
       var keyRate = KD.keyWpm(typedKeys(), ms);
+      var marks = session.exam && session.words.length >= 350
+        ? (session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw))
+        : Math.min(25, Math.max(0, wordRate * 10 * markRate));
+      marks = Math.round(marks * 100) / 100;
       session.result = {
         kind: "lock",
         correct: okw,
@@ -2743,8 +2860,12 @@
         total: session.words.length,
         done: session.marks.length,
         marks: marks,
+        rawMarks: Math.round(okw * markRate * 100) / 100,
         wordRate: wordRate,
         wpm: keyRate,
+        netWpm: Math.round(wordRate * 10) / 10,
+        backspaces: session.backspaces || 0,
+        typedWords: session.typedWords || [],
         ms: ms,
         acc: session.marks.length ? (okw / session.marks.length) * 100 : 0
       };
@@ -3280,19 +3401,177 @@
 
   function startAIDrill() { startWeak(); }
 
+  function comparisonTextHTML(session) {
+    if (!session) return "";
+    var html = "";
+    if (session.kind === "lock" && session.words && session.words.length) {
+      session.words.forEach(function (w, i) {
+        var wordText = esc(w.h || w.k || "");
+        if (i < (session.marks || []).length) {
+          if (session.marks[i] === "ok") {
+            html += '<span class="comp-ok">' + wordText + '</span> ';
+          } else {
+            var typedItem = session.typedWords && session.typedWords[i];
+            var typedText = typedItem ? esc(typedItem.text || "—") : "—";
+            html += '<span class="comp-bad">' + typedText + '<span class="comp-expected">[' + wordText + ']</span></span> ';
+          }
+        } else {
+          html += '<span class="comp-omitted">' + wordText + '</span> ';
+        }
+      });
+    } else if (session.tokens && session.tokens.length) {
+      var lastStepTi = -1;
+      var steps = session.steps || [];
+      for (var s = 0; s < session.i && s < steps.length; s++) {
+        if (steps[s] && steps[s].ti >= 0) lastStepTi = Math.max(lastStepTi, steps[s].ti);
+      }
+      session.tokens.forEach(function (tok, ti) {
+        var wordText = esc(tok.h || tok.k || "");
+        var bad = session.badTokens && session.badTokens[ti];
+        if (ti <= lastStepTi) {
+          if (bad) {
+            html += '<span class="comp-bad">' + wordText + '<span class="comp-expected">[त्रुटि]</span></span> ';
+          } else {
+            html += '<span class="comp-ok">' + wordText + '</span> ';
+          }
+        } else {
+          html += '<span class="comp-omitted">' + wordText + '</span> ';
+        }
+      });
+    }
+    if (!html) return "";
+    return (
+      '<div class="comp-section">' +
+        '<div class="comp-header">' +
+          '<h4>Comparison Text (तुलनात्मक पाठ एवं त्रुटि समीक्षा)</h4>' +
+          '<div class="comp-legend">' +
+            '<span class="legend-item"><span class="dot dot-ok"></span> सही शब्द (Correct)</span>' +
+            '<span class="legend-item"><span class="dot dot-bad"></span> गलत शब्द [सही रूप] (Mistake)</span>' +
+            '<span class="legend-item"><span class="dot dot-omitted"></span> छूटे हुए शब्द (Omitted)</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="comp-body">' + html + '</div>' +
+      '</div>'
+    );
+  }
+
+  function rssbScorecardHTML(r, session) {
+    if (!r) return "";
+    var isEn = session && session.lang === "en";
+    var markRate = isEn ? 0.05 : 0.0625;
+    var marks = (r.marks != null && !isNaN(r.marks)) ? r.marks : 0;
+    marks = Math.round(marks * 100) / 100;
+    var qualify = (marks + 0.0001) >= 9.0;
+
+    var totalWords = r.total != null ? r.total : (r.correct != null ? r.correct + (r.wrong || 0) : 0);
+    var correctWords = r.correct != null ? r.correct : Math.round(marks / markRate);
+    var wrongWords = r.wrong != null ? r.wrong : Math.max(0, totalWords - correctWords);
+    if (totalWords <= 0) totalWords = correctWords + wrongWords;
+
+    var totalChars = 0;
+    if (session && session.kind === "lock" && session.words) {
+      var doneCount = Math.min((session.marks || []).length, session.words.length);
+      for (var ci = 0; ci < doneCount; ci++) {
+        var cw = session.words[ci];
+        totalChars += (cw && cw.h) ? cw.h.length : 5;
+      }
+    } else if (session && session.correct) {
+      totalChars = session.correct;
+    }
+    var avgWordLen = totalWords > 0 && totalChars > 0 ? (totalChars / totalWords).toFixed(2) : "5.10";
+    var totalPassageWords = (session && session.words && session.words.length) ? session.words.length : ((session && session.tokens) ? session.tokens.length : totalWords);
+    var omittedWords = Math.max(0, totalPassageWords - totalWords);
+    var backspacesCount = (session && session.backspaces != null) ? session.backspaces : ((r && r.backspaces != null) ? r.backspaces : 0);
+
+    var acc = Math.round(r.acc != null ? r.acc : (totalWords > 0 ? (correctWords / totalWords) * 100 : 100));
+    var errorRate = Math.max(0, Math.round(100 - acc));
+
+    var netWpm = r.netWpm != null ? r.netWpm : (r.wordRate != null ? Math.round(r.wordRate * 10) / 10 : fmt(r.wpm || 0));
+    var grossWpm = fmt(r.wpm || netWpm || 0);
+    var netKdph = Math.round(parseFloat(netWpm || 0) * 5 * 60);
+    var grossKdph = Math.round(parseFloat(grossWpm || 0) * 5 * 60);
+    var durationText = dur(r.ms || 0);
+
+    var formulaNote = isEn
+      ? "English Typing: 0.05 marks for each correct word (500 words = 25 marks). Minimum qualifying cutoff: 9.0 marks (36%)."
+      : "Hindi Typing: 0.0625 marks for each correct word (400 words = 25 marks). Minimum qualifying cutoff: 9.0 marks (36%).";
+
+    return (
+      '<div class="rssb-scorecard-box">' +
+        '<div class="rssb-header-row">' +
+          '<div class="rssb-title-area">' +
+            '<span class="rssb-kicker">RSSB LDC Official Exam Evaluation</span>' +
+            '<h3>RSSB LDC Typing Test Result</h3>' +
+          '</div>' +
+          '<div class="rssb-main-badge ' + (qualify ? 'pass' : 'fail') + '">' +
+            '<div class="rssb-big-marks">' + fmt(marks) + ' <small>/ 25 Marks</small></div>' +
+            '<div class="rssb-qual-tag ' + (qualify ? 'pass' : 'fail') + '">' +
+              (qualify ? '✔ QUALIFIED (Cleared 9.0 Cutoff)' : '✖ UNDER QUALIFYING CUTOFF (Need 9.0)') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="rssb-grid">' +
+          '<div class="rssb-col">' +
+            '<h4>Result Overview</h4>' +
+            '<div class="rssb-item"><span>Maximum Marks:</span><b>25</b></div>' +
+            '<div class="rssb-item"><span>Minimum Passing Marks:</span><b>9.0 (36%)</b></div>' +
+            '<div class="rssb-item highlight"><span>Marks Obtained:</span><b class="' + (qualify ? 'text-pass' : 'text-fail') + '">' + fmt(marks) + ' / 25</b></div>' +
+            '<div class="rssb-item"><span>Final Result:</span><b class="' + (qualify ? 'text-pass' : 'text-fail') + '">' + (qualify ? 'Qualified' : 'Under Cutoff') + '</b></div>' +
+          '</div>' +
+
+          '<div class="rssb-col">' +
+            '<h4>Typing Details</h4>' +
+            '<div class="rssb-item"><span>Test Duration:</span><b>' + durationText + '</b></div>' +
+            '<div class="rssb-item"><span>Total Words Typed:</span><b>' + totalWords + '</b></div>' +
+            '<div class="rssb-item"><span>Correct Words:</span><b class="text-pass">' + correctWords + '</b></div>' +
+            '<div class="rssb-item"><span>Incorrect Words:</span><b class="text-fail">' + wrongWords + '</b></div>' +
+            '<div class="rssb-item"><span>Omitted / Skipped Words:</span><b>' + omittedWords + '</b></div>' +
+            '<div class="rssb-item"><span>Avg. Word Length:</span><b>' + avgWordLen + '</b></div>' +
+          '</div>' +
+
+          '<div class="rssb-col">' +
+            '<h4>Speed Details</h4>' +
+            '<div class="rssb-item"><span>Net Speed:</span><b>' + netWpm + ' WPM <small>(' + netKdph + ' kdph)</small></b></div>' +
+            '<div class="rssb-item"><span>Gross Speed:</span><b>' + grossWpm + ' WPM <small>(' + grossKdph + ' kdph)</small></b></div>' +
+            '<div class="rssb-item"><span>Backspace:</span><b>' + backspacesCount + ' times <small style="font-size:11px;color:var(--pass, #16a34a);font-weight:600;">(Allowed · No Penalty)</small></b></div>' +
+            '<div class="rssb-item"><span>Accuracy:</span><b>' + acc + '%</b></div>' +
+            '<div class="rssb-item"><span>Errors:</span><b>' + errorRate + '%</b></div>' +
+          '</div>' +
+        '</div>' +
+
+        comparisonTextHTML(session) +
+
+        '<div class="rssb-footer-note">' +
+          '<span><b>Rules and Instructions:</b> ' + formulaNote + ' Duration normalized to standard 10-minute RSSB scale. Backspace is allowed within the uncommitted word only (no marks deducted if word is corrected before pressing Space); Space locks the word.</span>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
   function resultHTML() {
     if (!session || !session.result) return '<div class="wrap"><div class="card">No result.</div></div>';
     if (session.live && (!store.live || !store.live.lesson)) ensureLive();
     var r = session.result;
     if (session.placement) return placementResult(r);
-    if (session.rhythmBurst) return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><h1>Rhythm practice complete</h1><p>' + Math.round(r.realAcc == null ? r.acc : r.realAcc) + '% first-try accuracy. This short burst is practice; it does not count as passage speed.</p><p>Rest for at least 30 seconds. Then use the same relaxed rhythm on fresh text.</p><div class="row-btns"><button class="btn primary" data-act="start-current">Fresh sentence practice</button><button class="btn" data-go="home">Daily plan</button></div></section></main>';
-    if (session.practice40Weak) return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi practice</div><h1>Combination practice complete</h1><p>Take this steady rhythm into your next practice. Every keystroke across all devices builds your aggregate speed.</p><div class="row-btns"><button class="btn primary" data-act="practice40-check">Check my speed</button><button class="btn" data-act="practice40-weak">More combination practice</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
-    if (session.lesson.scoreFree) {
+    if (session.rhythmBurst) {
+      return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><h1>Rhythm practice complete</h1>' +
+        rssbScorecardHTML(r, session) +
+        '<p>' + Math.round(r.realAcc == null ? r.acc : r.realAcc) + '% first-try accuracy. This short burst is practice; it builds finger cadence.</p><p>Rest for at least 30 seconds. Then use the same relaxed rhythm on fresh text.</p><div class="row-btns"><button class="btn primary" data-act="start-current">Fresh sentence practice</button><button class="btn" data-go="home">Daily plan</button></div></section></main>';
+    }
+    if (session.practice40Weak) {
+      return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Hindi practice</div><h1>Combination practice complete</h1>' +
+        rssbScorecardHTML(r, session) +
+        '<p>Take this steady rhythm into your next practice. A clean first press on the weak keys is what raises your recent speed.</p><div class="row-btns"><button class="btn primary" data-act="practice40-check">Check my speed</button><button class="btn" data-act="practice40-weak">More combination practice</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
+    }
+    if (session.lesson && session.lesson.scoreFree) {
       var recovery = session.recoveryFor != null;
       return '<main id="main-content" class="wrap narrow result-page" tabindex="-1"><section class="card result-card"><div class="result-lesson">' + esc(session.lesson.title) + '</div><h1>' +
-        (recovery ? 'Ready to try again' : 'Key learned') + '</h1><p>' + (recovery ? 'Take that steady rhythm back into the lesson.' : 'You practised the new key. Next, use it in short combinations.') +
+        (recovery ? 'Ready to try again' : 'Key learned') + '</h1>' +
+        rssbScorecardHTML(r, session) +
+        '<p>' + (recovery ? 'Take that steady rhythm back into the lesson.' : 'You practised the new key. Next, use it in short combinations.') +
         '</p><div class="row-btns"><button class="btn primary" data-act="' + (recovery ? 'return-course' : 'next') + '">' + (recovery ? 'Return to lesson' : 'Continue') +
-        '</button><button class="btn" data-act="retry">Practise again</button><button class="btn ghost" data-go="home">Lesson Map</button></div><p class="small muted">No speed goal or stars for this guided practice. Press Enter to continue.</p></section></main>';
+        '</button><button class="btn" data-act="retry">Practise again</button><button class="btn ghost" data-go="home">Lesson Map</button></div></section></main>';
     }
     if (session.practice40) return practice40Result(r);
     if (!session.exam) {
@@ -3301,8 +3580,8 @@
       var rows = session.lesson.id ? attemptsFor(session.lesson.id).slice(-8) : [];
       return '<main id="main-content" class="wrap narrow result-page" tabindex="-1"><section class="card result-card"><div class="result-lesson">' + (session.index >= 0 ? 'Lesson ' + (session.index + 1) + ' · ' : '') + esc(session.lesson.title) + '</div>' +
         '<h1>' + (stars >= 3 ? 'Well done!' : stars >= 1 ? 'Lesson passed' : 'Let’s practice again') + '</h1>' + starFanfareHTML(stars) +
-        '<div class="dials">' + dialHTML('Accuracy', Math.round(r.acc || 0) + '%', r.acc || 0, false) + dialHTML('Time', dur(r.ms), 0, true) + dialHTML('Speed', fmt(r.wpm || 0), Math.min(100, (r.wpm || 0) / (session.lesson.high || 40) * 100), false) + '</div>' +
-        '<p class="small muted">' + Math.round(r.realAcc == null ? r.acc : r.realAcc) + '% first-try accuracy. Pass: ' + (session.lesson.acc || 94) + '% accuracy and ' + (session.lesson.min || 3) + ' WPM. Goal speed: ' + (session.lesson.high || 40) + ' WPM.</p>' +
+        rssbScorecardHTML(r, session) +
+        '<p class="small muted">' + Math.round(r.realAcc == null ? r.acc : r.realAcc) + '% first-try accuracy. Pass: at least 9.0 marks (36%). High score target: 22.0+ marks.</p>' +
         (session.live ? '<p role="status">' + (store.live.lesson.aiGenerated ? 'Your next AI-generated sentences are ready.' : store.live.lesson.aiState === 'unavailable' ? 'AI is unavailable. ' + (store.live.lesson.aiDetail ? esc(store.live.lesson.aiDetail) + ' ' : '') + 'Continue opens practice-pool text; you can retry AI generation.' : 'Preparing new AI sentences from your weak keys…') + '</p>' + (store.live.lesson.aiState === 'unavailable' ? '<button class="btn" data-act="retry-ai-sentence">Retry AI generation</button>' : '') : '') +
         (session.recovery ? '<p class="practice-feedback">Practise ' + esc(session.recovery.title) + ' in a short review.</p>' : '') +
         '<div class="row-btns"><button class="btn primary" data-act="' + nextAction + '">' + (nextAction === 'repair' ? 'Practise ' + esc(session.recovery.title) : nextAction === 'retry' ? 'Practice Again' : 'Continue') + '</button>' +
@@ -3310,24 +3589,13 @@
         (rows.length > 1 ? '<section class="card"><h3>Your progress on this lesson</h3>' + chartBlock(rows) + '</section>' : '') +
         (session.index >= 0 ? '<button class="history-link" data-act="lesson-history">View attempts &amp; playback</button>' : '') + '</main>';
     }
-    var qualify = r.marks + 0.0001 >= 9;
-    var full = r.marks + 0.0001 >= 25;
-    var need = session.lang === "en" ? "500 correct words = 25. 180 = 9." : "400 correct words = 25. 144 = 9.";
-    var list = session.wrong.slice(0, 24).map(function (w) {
+    var list = session.wrong && session.wrong.slice(0, 24).map(function (w) {
       return "<li>" + esc(w.want) + " · you typed " + esc(w.got) + "</li>";
     }).join("");
-    return '<div class="wrap narrow"><div class="card"><div class="kicker">' + esc(session.lesson.title) + "</div>" +
-      "<h2>" + fmt(r.marks) + " / 25 Marks</h2>" +
-      '<div class="exam-status-tag ' + (qualify ? 'pass' : 'fail') + '">' + (qualify ? '✓ QUALIFIED (Cleared 9.0 Cutoff)' : '✗ UNDER QUALIFYING CUTOFF (Minimum 9.0 Marks Required)') + '</div>' +
-      "<p>" + (full ? "Full marks. Repeat this accuracy inside the time." : qualify ? "The qualifying line is crossed. 25/25 needs every word correct." : "Under 9. Failing this paper can cost the marks of the other three papers. Confirm that rule on the current RSSB notice.") + "</p>" +
-      '<div class="stats">' +
-      '<div class="stat"><b>' + r.correct + "</b><span>Correct words</span></div>" +
-      '<div class="stat"><b>' + r.wrong + "</b><span>Wrong locks</span></div>" +
-      '<div class="stat"><b>' + (r.correct + r.wrong > 0 ? Math.round((r.correct / (r.correct + r.wrong)) * 100) : 0) + "%</b><span>Word Accuracy</span></div>" +
-      '<div class="stat"><b>' + fmt(r.wpm) + "</b><span>Key WPM</span></div></div>" +
-      '<p class="small muted">' + need + " A wrong word is not subtracted. It is simply not counted. After Space you cannot fix it.</p>" +
+    return '<div class="wrap narrow result-page"><section class="card result-card"><div class="kicker">' + esc(session.lesson.title) + "</div>" +
+      rssbScorecardHTML(r, session) +
       (list ? '<h3>Words that fell</h3><ul class="wrong-list">' + list + "</ul>" : "") +
-      '<div class="row-btns"><button class="btn primary" data-act="retry">Again</button><button class="btn" data-go="home">Practice Dashboard</button></div></div></div>';
+      '<div class="row-btns"><button class="btn primary" data-act="retry">Again</button><button class="btn" data-act="para" title="Fetch a new topic from internet">New Internet Passage</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic">🌐 Choose Topic</button><button class="btn" data-go="home">Practice Dashboard</button></div></section></div>';
   }
 
   function placementResult(r) {
@@ -3583,18 +3851,31 @@
       });
       return;
     }
-    if (name === "exam-hi") startExam("hi", 10, 400);
-    if (name === "exam-hi-5min") startExam("hi", 5, 200);
+    if (name === "exam-hi") {
+      startDynamicPassage(null, 400, 10, "hi");
+      return;
+    }
+    if (name === "exam-hi-5min") {
+      startDynamicPassage(null, 200, 5, "hi");
+      return;
+    }
     if (name === "para") {
-      startLock({
-        id: "para",
-        title: "Unseen paragraph",
-        teach: "The sentences join in a new order each time. This will not become a paragraph you can memorize. Space locks. A miss shows at once here. In the exam it does not.",
-        words: KD.buildHindiPassage(80),
-        hints: "hindi",
-        showFix: true,
-        finger: "Read, then the fingers"
-      });
+      startDynamicPassage(null, 110, 0, "hi");
+      return;
+    }
+    if (name === "next-dynamic-para") {
+      var isEx = session && session.exam ? (session.limit >= 600000 ? 10 : 5) : 0;
+      var wCount = isEx ? (isEx === 5 ? 200 : 400) : 110;
+      startDynamicPassage(null, wCount, isEx, (session && session.lang) || "hi");
+      return;
+    }
+    if (name === "prompt-topic") {
+      var userTopic = window.prompt("पैराग्राफ के लिए कोई भी विषय या कीवर्ड दर्ज करें (उदा: चंद्रयान 3, राजस्थान के किले, आर्टिफिशियल इंटेलिजेंस, पर्यावरण, खेल, आदि):", "");
+      if (userTopic && userTopic.trim()) {
+        var isEx2 = session && session.exam ? (session.limit >= 600000 ? 10 : 5) : 0;
+        var wCount2 = isEx2 ? (isEx2 === 5 ? 200 : 400) : 110;
+        startDynamicPassage(userTopic.trim(), wCount2, isEx2, (session && session.lang) || "hi");
+      }
       return;
     }
     if (name === "start-current") {
@@ -3635,6 +3916,109 @@
       else go("home");
       return;
     }
+  }
+
+  function showToast(msg) {
+    try {
+      var old = document.querySelector(".toast-banner");
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      var toast = document.createElement("div");
+      toast.className = "toast-banner";
+      toast.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#f8fafc;padding:12px 24px;border-radius:24px;border:1px solid #38bdf8;box-shadow:0 10px 30px rgba(0,0,0,0.5);z-index:99999;font-size:14px;font-weight:600;display:flex;align-items:center;gap:10px;pointer-events:none;transition:opacity 0.3s ease;";
+      toast.innerHTML = msg;
+      document.body.appendChild(toast);
+      setTimeout(function () {
+        toast.style.opacity = "0";
+        setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+      }, 3500);
+    } catch (e) {}
+  }
+
+  function startDynamicPassage(customTopic, wordCount, isExamMinutes, lang) {
+    lang = lang || (session && session.lang) || "hi";
+    var isExam = !!isExamMinutes;
+    var minutes = isExamMinutes === 5 ? 5 : 10;
+    var targetWords = wordCount || (isExam ? (minutes === 5 ? 200 : 400) : 110);
+
+    showToast("🌐 इंटरनेट / AI से नया पैराग्राफ खोजा जा रहा है...");
+
+    fetch("/api/dynamic-passage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lang: lang,
+        topic: customTopic || "",
+        words: targetWords
+      })
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (data && data.ok && Array.isArray(data.tokens) && data.tokens.length >= 20) {
+        var title = data.title || (isExam ? "RSSB Hindi Speed Exam" : "Unseen Paragraph");
+        var sourceLabel = data.source === "gemini-live" ? "🌐 Live AI" : (data.source === "wikipedia-live" ? "🌐 Wikipedia Live" : "📚 Curated Bank");
+        showToast("✔ नया विषय लोड हुआ: <b>" + esc(title) + "</b> (" + sourceLabel + ")");
+
+        if (isExam) {
+          startLock({
+            id: minutes === 5 ? "exam-hi-5min" : "exam-hi",
+            title: "RSSB Hindi speed · " + minutes + " min (" + title + ")",
+            teach: "विषय: " + title + " (" + (data.theme || "Current Topic") + ") · " + sourceLabel + "। कुल " + data.tokens.length + " शब्द। प्रत्येक सही शब्द पर 0.0625 अंक। Space दबाने पर शब्द लॉक होगा।",
+            words: data.tokens,
+            limit: minutes * 60000,
+            hints: "none",
+            showFix: false,
+            lang: "hi",
+            exam: true,
+            finger: "DevLys / Kruti"
+          });
+        } else {
+          startLock({
+            id: "para",
+            title: "Word-lock: " + title,
+            teach: "विषय: " + title + " (" + (data.theme || "Current Topic") + ") · " + sourceLabel + "। प्रत्येक बार एक नया विषय मिलेगा। Space दबाने से शब्द लॉक होगा।",
+            words: data.tokens,
+            hints: "hindi",
+            showFix: true,
+            finger: "Read, then the fingers"
+          });
+        }
+      } else {
+        throw new Error("Invalid response format");
+      }
+    }).catch(function (err) {
+      console.warn("Dynamic passage fetch failed, using local rotation:", err);
+      showToast("📚 ऑफलाइन संग्रह से नया विषय लोड किया गया");
+      if (isExam) {
+        startExam(lang, minutes, targetWords);
+      } else {
+        var lastIdx = typeof store.lastWordLockThemeIndex === "number" ? store.lastWordLockThemeIndex : -1;
+        var themed = (KD.nextThemedWordLockPassage) ? KD.nextThemedWordLockPassage(lastIdx) : null;
+        if (themed) {
+          store.lastWordLockThemeIndex = themed.index;
+          if (typeof save === "function") save();
+          startLock({
+            id: "para",
+            title: "Word-lock: " + themed.title,
+            teach: "विषय: " + themed.title + " (" + themed.theme + ")। ऑफलाइन संग्रह से नया विषय। Space दबाने से शब्द लॉक होगा।",
+            words: themed.tokens,
+            hints: "hindi",
+            showFix: true,
+            finger: "Read, then the fingers"
+          });
+        } else {
+          startLock({
+            id: "para",
+            title: "Unseen paragraph",
+            teach: "Space locks the word. A miss shows at once here. In the exam it does not.",
+            words: KD.buildHindiPassage(targetWords),
+            hints: "hindi",
+            showFix: true,
+            finger: "Read, then the fingers"
+          });
+        }
+      }
+    });
   }
 
   function startExam(lang, durationMinutes, wordTarget) {

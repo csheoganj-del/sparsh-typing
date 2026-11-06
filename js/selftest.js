@@ -452,5 +452,19 @@ if (first.pattern !== "common" || first.high !== 32) {
   console.log("FAIL starter live bar changed", first.pattern, first.high);
 }
 console.log("word lessons", wordLessons.map(function (l) { return l.id; }).join(", "));
+function listenTaps(n, ms, first) {
+  var rows = [];
+  for (var i = 0; i < n; i++) rows.push({ ok: true, ms: ms, first: first !== false });
+  return rows;
+}
+const listening = KD.listenLive(listenTaps(4, 200), 37);
+const sure = KD.listenLive(listenTaps(16, 300), 37);
+const fastClean = KD.listenLive(listenTaps(16, 200), 37);
+const doubt = KD.listenLive(listenTaps(16, 700), 37);
+const slip = KD.listenLive(listenTaps(12, 280).concat([{ ok: false, ms: 0, first: false }]), 37);
+if (listening.state !== "listen" || sure.state !== "sure" || sure.first !== 100 || fastClean.state !== "sure" || doubt.state !== "doubt" || slip.state !== "slip") {
+  bad++;
+  console.log("FAIL live listener", listening.state, sure.state, sure.wpm, fastClean.state, doubt.state, slip.state);
+}
 console.log(bad === 0 ? "ALL GOOD" : bad + " failures");
 process.exit(bad === 0 ? 0 : 1);
