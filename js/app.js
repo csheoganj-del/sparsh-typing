@@ -4031,13 +4031,177 @@
     } catch (e) {}
   }
 
+    var LIVE_TOPIC_POOL_HI = [
+    "राजस्थान का भूगोल", "चंद्रयान 3", "सौर ऊर्जा", "मेहरानगढ़ दुर्ग", "पर्यावरण और जलवायु",
+    "भारतीय रेल और वंदे भारत", "कुंभलगढ़ दुर्ग", "आयुर्वेद और योग", "थार मरुस्थल",
+    "कृत्रिम बुद्धिमत्ता", "रणथंभौर राष्ट्रीय उद्यान", "जैविक खेती", "भारतीय संविधान",
+    "डिजिटल भारत", "अमृता देवी बिश्नोई", "हवा महल जयपुर", "भारतीय अंतरिक्ष अनुसंधान",
+    "जल संरक्षण", "हस्तशिल्प और कला", "पुस्तकालय और शिक्षा", "ओलंपिक खेल और भारत",
+    "गंगा और हिमालय", "नवीकरणीय ऊर्जा", "चित्तौड़गढ़ दुर्ग", "इलेक्ट्रिक वाहन",
+    "राष्ट्रीय शिक्षा नीति", "भारतीय मौसम विज्ञान", "खेजड़ी आंदोलन", "पंचायती राज व्यवस्था"
+  ];
+
+  var LIVE_TOPIC_POOL_EN = [
+    "Renewable Energy in India", "ISRO Space Exploration", "Rajasthan Forts and Palaces",
+    "Digital Public Infrastructure", "Artificial Intelligence and Future", "Indian Wildlife Conservation",
+    "Himalayas and Rivers", "Yoga and Preventive Health", "Electric Vehicles Revolution",
+    "Sustainable Agriculture", "Indian Heritage and Tourism", "High Speed Railways"
+  ];
+
+  function cleanHindiProse(text) {
+    return String(text || "")
+      .replace(/==.*?==/g, " ")
+      .replace(/\([^\)]*\)/g, " ")
+      .replace(/\[\d+\]/g, " ")
+      .replace(/\u0901/g, "\u0902")
+      .replace(/[^\u0900-\u097F0-9\s।,!?\-"']/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function cleanEnglishProse(text) {
+    return String(text || "")
+      .replace(/==.*?==/g, " ")
+      .replace(/\([^\)]*\)/g, " ")
+      .replace(/\[\d+\]/g, " ")
+      .replace(/[^a-zA-Z0-9\s.,!?'"\-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function tokenizeLiveWords(rawText, lang, maxWords) {
+    var isEn = lang === "en";
+    var text = isEn ? cleanEnglishProse(rawText) : cleanHindiProse(rawText);
+    var words = text.split(/\s+/).filter(Boolean);
+    var tokens = [];
+    maxWords = maxWords || 110;
+
+    for (var i = 0; i < words.length && tokens.length < maxWords; i++) {
+      var w = words[i];
+      if (isEn) {
+        tokens.push({ h: w, k: w, lang: "en" });
+      } else {
+        var tok = null;
+        if (typeof KD !== "undefined" && KD.safeToken) {
+          tok = KD.safeToken(w);
+        }
+        if (tok) {
+          tokens.push({ h: tok.h, k: tok.k, lang: "hi" });
+        } else {
+          var stripped = w.replace(/[।,!?\-"']+$/g, "");
+          if (stripped && stripped !== w && KD.safeToken) {
+            tok = KD.safeToken(stripped);
+            if (tok) tokens.push({ h: tok.h, k: tok.k, lang: "hi" });
+          }
+        }
+      }
+    }
+    return tokens;
+  }
+
+  function fetchClientSideLivePassage(customTopic, targetWords, isExam, minutes, lang) {
+    var isEn = lang === "en";
+    var pool = isEn ? LIVE_TOPIC_POOL_EN : LIVE_TOPIC_POOL_HI;
+    var query = customTopic && customTopic.trim();
+    if (!query) {
+      query = pool[Math.floor(Math.random() * pool.length)];
+    }
+    var wikiDomain = isEn ? "en.wikipedia.org" : "hi.wikipedia.org";
+    var url = "https://" + wikiDomain + "/w/api.php?action=query&generator=search&gsrsearch=" + encodeURIComponent(query) + "&gsrlimit=1&prop=extracts&explaintext=1&format=json&origin=*";
+
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    }).then(function (data) {
+      var pages = data && data.query && data.query.pages;
+      if (!pages) throw new Error("No wiki pages");
+      var firstKey = Object.keys(pages)[0];
+      var page = pages[firstKey];
+      if (!page || !page.extract || page.extract.length < 50) throw new Error("Short extract");
+
+      var tokens = tokenizeLiveWords(page.extract, lang, targetWords);
+      if (tokens.length < 20) throw new Error("Insufficient tokens");
+
+      var title = page.title || query;
+      showToast("🌐 इंटरनेट से नया विषय लोड हुआ: <b>" + esc(title) + "</b> (Wikipedia Live)");
+
+      if (isExam) {
+        startLock({
+          id: minutes === 5 ? (isEn ? "exam-en-5min" : "exam-hi-5min") : (isEn ? "exam-en" : "exam-hi"),
+          title: (isEn ? "RSSB English Speed · " : "RSSB Hindi Speed · ") + minutes + " min (" + title + ")",
+          teach: "विषय: " + title + " · 🌐 Live Internet। कुल " + tokens.length + " शब्द। प्रत्येक सही शब्द पर 0.0625 अंक। Space दबाने पर शब्द लॉक होगा।",
+          words: tokens,
+          limit: minutes * 60000,
+          hints: "none",
+          showFix: false,
+          lang: lang,
+          exam: true,
+          finger: isEn ? "English touch typing" : "DevLys / Kruti"
+        });
+      } else {
+        startLock({
+          id: "para",
+          title: "Word-lock: " + title,
+          teach: "विषय: " + title + " · 🌐 Live Internet। प्रत्येक बार इंटरनेट से नया विषय। Space दबाने से शब्द लॉक होगा।",
+          words: tokens,
+          hints: isEn ? "english" : "hindi",
+          lang: lang,
+          showFix: true,
+          finger: "Read, then the fingers"
+        });
+      }
+      return true;
+    });
+  }
+
   function startDynamicPassage(customTopic, wordCount, isExamMinutes, lang) {
     lang = lang || (session && session.lang) || "hi";
     var isExam = !!isExamMinutes;
     var minutes = isExamMinutes === 5 ? 5 : 10;
     var targetWords = wordCount || (isExam ? (minutes === 5 ? 200 : 400) : 110);
 
-    showToast("🌐 इंटरनेट / AI से नया पैराग्राफ खोजा जा रहा है...");
+    showToast("🌐 इंटरनेट से नया पैराग्राफ लोड किया जा रहा है...");
+
+    function fallbackToOffline(err) {
+      console.warn("Live internet fetch failed, falling back to offline collection:", err);
+      showToast("📚 इंटरनेट अनुपलब्ध: ऑफ़लाइन संग्रह से विषय लोड किया गया");
+      if (isExam) {
+        startExam(lang, minutes, targetWords);
+      } else {
+        var lastIdx = typeof store.lastWordLockThemeIndex === "number" ? store.lastWordLockThemeIndex : -1;
+        var themed = (KD.nextThemedWordLockPassage) ? KD.nextThemedWordLockPassage(lastIdx) : null;
+        if (themed) {
+          store.lastWordLockThemeIndex = themed.index;
+          if (typeof save === "function") save();
+          startLock({
+            id: "para",
+            title: "Word-lock: " + themed.title,
+            teach: "विषय: " + themed.title + " (" + themed.theme + ")। ऑफलाइन संग्रह से नया विषय। Space दबाने से शब्द लॉक होगा।",
+            words: themed.tokens,
+            hints: "hindi",
+            showFix: true,
+            finger: "Read, then the fingers"
+          });
+        } else {
+          startLock({
+            id: "para",
+            title: "Unseen paragraph",
+            teach: "Space locks the word. A miss shows at once here. In the exam it does not.",
+            words: KD.buildHindiPassage(targetWords),
+            hints: "hindi",
+            showFix: true,
+            finger: "Read, then the fingers"
+          });
+        }
+      }
+    }
+
+    var isStaticHost = location.hostname.indexOf("github.io") >= 0 || location.protocol === "file:" || (location.hostname !== "127.0.0.1" && location.hostname !== "localhost");
+
+    if (isStaticHost) {
+      fetchClientSideLivePassage(customTopic, targetWords, isExam, minutes, lang).catch(fallbackToOffline);
+      return;
+    }
 
     fetch("/api/dynamic-passage", {
       method: "POST",
@@ -4084,37 +4248,10 @@
         throw new Error("Invalid response format");
       }
     }).catch(function (err) {
-      console.warn("Dynamic passage fetch failed, using local rotation:", err);
-      showToast("📚 ऑफलाइन संग्रह से नया विषय लोड किया गया");
-      if (isExam) {
-        startExam(lang, minutes, targetWords);
-      } else {
-        var lastIdx = typeof store.lastWordLockThemeIndex === "number" ? store.lastWordLockThemeIndex : -1;
-        var themed = (KD.nextThemedWordLockPassage) ? KD.nextThemedWordLockPassage(lastIdx) : null;
-        if (themed) {
-          store.lastWordLockThemeIndex = themed.index;
-          if (typeof save === "function") save();
-          startLock({
-            id: "para",
-            title: "Word-lock: " + themed.title,
-            teach: "विषय: " + themed.title + " (" + themed.theme + ")। ऑफलाइन संग्रह से नया विषय। Space दबाने से शब्द लॉक होगा।",
-            words: themed.tokens,
-            hints: "hindi",
-            showFix: true,
-            finger: "Read, then the fingers"
-          });
-        } else {
-          startLock({
-            id: "para",
-            title: "Unseen paragraph",
-            teach: "Space locks the word. A miss shows at once here. In the exam it does not.",
-            words: KD.buildHindiPassage(targetWords),
-            hints: "hindi",
-            showFix: true,
-            finger: "Read, then the fingers"
-          });
-        }
-      }
+      // If local server endpoint failed, try direct Wikipedia fetch before offline fallback
+      fetchClientSideLivePassage(customTopic, targetWords, isExam, minutes, lang).catch(function () {
+        fallbackToOffline(err);
+      });
     });
   }
 
