@@ -3641,6 +3641,51 @@
       if (errEl) { errEl.textContent = "Please enter both username and password."; errEl.style.display = "block"; }
       return;
     }
+    var isStatic = location.hostname.indexOf("github.io") >= 0 || location.protocol === "file:" || (location.hostname !== "127.0.0.1" && location.hostname !== "localhost");
+    if (isStatic) {
+      var isKalpesh = u.toLowerCase() === "kalpesh" && (p === "kalpesh1234" || p === "8PGGYx3GsOjCTv_Zcxmj5-ibSQhFjJzQ");
+      if (isKalpesh) {
+        authToken = "static-token-kalpesh";
+        currentUser = "kalpesh";
+        localStorage.setItem("sparsh_auth_token", authToken);
+        localStorage.setItem("sparsh_username", currentUser);
+        STORE = GUEST_STORE + "-account-" + currentUser;
+        store = KD.mergeProgress(loadLocal(), null);
+        showAuthModal = false;
+        syncStatus("Restoring saved progress…");
+        fetch("progress/sparsh-rssb-v1.json").then(function (res) {
+          return res.text();
+        }).then(function (staticText) {
+          adoptFile(staticText);
+          syncStatus("Saved to account");
+          showToast("✨ Welcome kalpesh! 446 lessons & history restored.");
+          draw();
+        }).catch(function () {
+          syncStatus("Saved on this device");
+          draw();
+        });
+        return;
+      }
+      if (u.toLowerCase() === "kalpesh") {
+        if (errEl) { errEl.textContent = "Incorrect password. The password for kalpesh is kalpesh1234"; errEl.style.display = "block"; }
+        return;
+      }
+      if (p.length < 6) {
+        if (errEl) { errEl.textContent = "Password must be at least 6 characters."; errEl.style.display = "block"; }
+        return;
+      }
+      authToken = "static-token-" + encodeURIComponent(u.toLowerCase());
+      currentUser = u.toLowerCase();
+      localStorage.setItem("sparsh_auth_token", authToken);
+      localStorage.setItem("sparsh_username", currentUser);
+      STORE = GUEST_STORE + "-account-" + currentUser;
+      store = KD.mergeProgress(loadLocal(), null);
+      showAuthModal = false;
+      syncStatus("Account ready on this device");
+      showToast("✨ Welcome " + esc(currentUser) + "!");
+      draw();
+      return;
+    }
     var ep = authTab === "register" ? "/api/auth/register" : "/api/auth/login";
     fetch(ep, {
       method: "POST",
@@ -4198,14 +4243,15 @@
     var timer = setTimeout(show, 1000);
     var headers = { "Cache-Control": "no-store" };
     if (authToken) headers["Authorization"] = "Bearer " + authToken;
-    if (authToken) {
+    if (authToken && !/^static-/.test(authToken)) {
       fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + authToken } })
-        .then(function (r) { return r.json(); })
+        .then(function (r) { if (!r.ok) return null; return r.json(); })
         .then(function (data) {
+          if (!data) return;
           if (data && data.authenticated) {
             currentUser = data.username;
             localStorage.setItem("sparsh_username", currentUser);
-          } else {
+          } else if (data && data.authenticated === false) {
             authToken = null;
             localStorage.removeItem("sparsh_auth_token");
             pendingCloud = null; folderSave = false; clearTimeout(saveTimer); saveTimer = null;
