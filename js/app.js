@@ -3100,6 +3100,31 @@
       marks: session.result && session.result.marks != null ? Math.round(session.result.marks * 10) / 10 : null
     });
     if (store.log.length > 120) store.log = store.log.slice(store.log.length - 120);
+    if (session.ignition && KD.ignitionHeld) {
+      var held = KD.ignitionHeld(session.ignition);
+      session.ignition.held = held;
+      if (held.save) {
+        if (!store.live) store.live = { past: [] };
+        store.live.past = store.live.past || [];
+        store.live.past.push({
+          id: 'ignition-keep',
+          pattern: 'ignition',
+          stars: 0,
+          acc: Math.round(held.first),
+          realAcc: held.first,
+          ms: held.ms,
+          wpm: held.wpm,
+          min: 0,
+          mid: 0,
+          high: 0,
+          words: (session.tokens || []).map(function (token) { return token.h; }).slice(0, 24),
+          slips: [],
+          sentenceIds: ['ignition-keep:' + at],
+          at: at + 1
+        });
+        if (store.live.past.length > 40) store.live.past = store.live.past.slice(-40);
+      }
+    }
     if (session.live && session.lesson && store.live && store.live.lesson) {
       store.live.resume = null;
       if (session.lesson.pattern === 'history') KD.recordSentenceUsage(store.live, session.lesson, at);
@@ -3703,11 +3728,42 @@
     );
   }
 
+  function ignitionResult() {
+    var ig = session.ignition || {};
+    var held = ig.held || (KD.ignitionHeld ? KD.ignitionHeld(ig) : { wpm: 0, words: 0, first: 0, ms: 0, save: false, gain: 0 });
+    var cruise = ig.cruise || 0;
+    var ring = KD.msToWpm(ig.bestPaceMs || ig.paceMs || 0);
+    var heldText = held.words ? fmt(held.wpm) : '—';
+    var headline, detail;
+    if (!held.words) {
+      headline = 'The ring reached ' + fmt(ring) + ' WPM';
+      detail = 'Stay through the last minute. The bar leaves, and the minute you type without it is the speed that can count.';
+    } else if (held.save && held.gain >= 2) {
+      headline = 'You held ' + fmt(held.wpm) + ' WPM';
+      detail = fmt(held.gain) + ' WPM above your recent ' + fmt(cruise) + ', with the bar off, for ' + Math.round(held.ms / 1000) + ' seconds. ' + Math.round(held.first) + '% of those words were clean on the first try. This hold joins your recent sessions. Recent speed is the middle of those sessions, so one hold moves it only a little. It does not replace the two-minute check.';
+    } else if (held.first < 94) {
+      headline = 'Clean the words, then the speed stays';
+      detail = 'The ring reached ' + fmt(ring) + ' WPM. The unpaced minute was ' + fmt(held.wpm) + ' WPM at ' + Math.round(held.first) + '% clean words. Recent speed stays put until a minute is at least 94% clean.';
+    } else if (held.ms < 35000) {
+      headline = 'The ring reached ' + fmt(ring) + ' WPM';
+      detail = 'The unpaced part was too short to count. Stay for the full last minute next time.';
+    } else if (held.wpm + 0.5 < cruise) {
+      headline = 'You held ' + fmt(held.wpm) + ' WPM without the bar';
+      detail = 'The ring reached ' + fmt(ring) + ' WPM. The unpaced minute came out slower than your recent ' + fmt(cruise) + ', so recent speed stays put. Run it again. The first words are easy on purpose.';
+    } else {
+      headline = 'You held ' + fmt(held.wpm) + ' WPM';
+      detail = 'That sits next to your recent ' + fmt(cruise) + '. The ring reached ' + fmt(ring) + ' WPM. Another round starts between the two if this hold was saved.';
+    }
+    return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">4-minute ring</div><h1>' + headline + '</h1>' +
+      '<div class="ignition-result"><div><b>' + fmt(cruise) + '</b><span>Recent</span></div><div><b>' + fmt(ring) + '</b><span>Ring reached</span></div><div><b>' + heldText + '</b><span>Held, bar off</span></div></div>' +
+      '<p>' + detail + '</p><div class="row-btns"><button class="btn primary" data-act="ignition">Run the ring again</button><button class="btn" data-act="practice40-check">2-minute check</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
+  }
   function resultHTML() {
     if (!session || !session.result) return '<div class="wrap"><div class="card">No result.</div></div>';
     if (session.live && (!store.live || !store.live.lesson)) ensureLive();
     var r = session.result;
     if (session.placement) return placementResult(r);
+    if (session.ignition) return ignitionResult();
     if (session.rhythmBurst) {
       return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><h1>Rhythm practice complete</h1>' +
         rssbScorecardHTML(r, session) +
@@ -3984,6 +4040,7 @@
     if (name === 'practice40-check') { startPractice40(); return; }
     if (name === 'practice40-weak') { startWeak(); return; }
     if (name === 'rhythm-burst') { startRhythmBurst(); return; }
+    if (name === 'ignition') { startIgnition(); return; }
     if (name === 'repair') { if (session && session.recovery && session.index >= 0) startLesson(session.index, session.recovery); return; }
     if (name === 'return-course') { if (session && session.recoveryFor != null) startLesson(session.recoveryFor); return; }
     if (name === 'lesson-history') { screen = 'lesson'; draw(); return; }
@@ -4159,6 +4216,7 @@
     }
     if (name === "retry") {
       if (session && session.live) { startLive('repeat'); return; }
+      if (session && session.ignition) { startIgnition(); return; }
       if (session && session.rhythmBurst) { startRhythmBurst(); return; }
       if (session && session.practice40Weak) { act("practice40-weak"); return; }
       if (session && session.recoveryFor != null) { var index = session.recoveryFor; startLesson(index, KD.buildRecovery(KD.LESSONS[index], store, [])); }
@@ -4591,6 +4649,31 @@
     session.practice40Weak = false; session.rhythmBurst = true; session.limit = 25000;
     session.lesson.id = 'adaptive-burst'; session.lesson.title = '25-second rhythm practice';
     session.lesson.teach = 'Practise smooth presses near ' + program.nextTargetWpm + ' WPM. Keep 98% first-try accuracy. Use the same fingers and small movements. This short burst does not measure passage speed.';
+    paintShell();
+  }
+
+  function startIgnition() {
+    startWeak();
+    if (!session || !session.practice40Weak || !session.tokens || !session.tokens.length) return;
+    var base = session.tokens.map(function (token) { return Object.assign({}, token); });
+    var tokens = base.concat(base.map(function (token) { return Object.assign({}, token); }));
+    var read = KD.ignitionRead(store);
+    session.tokens = tokens;
+    session.lesson.tokens = tokens;
+    session.steps = KD.buildSteps(tokens);
+    session.words = tokens.map(function (token) { return { h: token.h, k: token.k, lang: 'hi' }; });
+    session.i = 0;
+    session.practice40Weak = false;
+    session.rhythmBurst = false;
+    session.ignition = KD.ignitionStart(read);
+    session.ignition.base = base;
+    session.limit = KD.IGNITION_TOTAL_MS;
+    session.lesson.id = 'ignition';
+    session.lesson.title = 'Raise speed today';
+    session.lesson.stage = 'ignition';
+    session.lesson.scoreFree = true;
+    session.lesson.teach = read.line;
+    session.index = -1;
     paintShell();
   }
 
