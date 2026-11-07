@@ -284,7 +284,7 @@
       if (!row || !row.at || !(row.ms > 0)) return;
       id = id || row.id || '';
       // The unpaced hold is stored again for speed. Minutes stay on the session log.
-      if (id === 'ignition-keep') return;
+      if (id === 'ignition-keep' || id === 'eyes-keep') return;
       if (seen[row.at]) return;
       seen[row.at] = true;
       rows.push({ at: row.at, ms: row.ms, kind: id === 'practice40' ? 'check' : /^exam-/.test(id) ? 'exam' :
@@ -555,6 +555,100 @@
       wpm: wpm, ms: Math.round(ms), keys: keys, words: words.length, first: first, save: save,
       gain: Math.round((wpm - cruise) * 10) / 10,
       paceWpm: state ? Math.round(KD.msToWpm(state.bestPaceMs) * 10) / 10 : 0
+    };
+  };
+
+  /* The exam does not mark the current word or follow it. This passage marks
+     the word for 45 seconds, then takes the mark away. Only the unmarked
+     words can join recent speed, and only when they are clean and not slower. */
+  KD.EYES_MARK_MS = 45000;
+  KD.EYES_TOTAL_MS = 240000;
+  KD.eyesRead = function (store) {
+    var plan = KD.adaptivePlan(store || {});
+    var cruise = plan.baselineWpm != null ? Number(plan.baselineWpm) : 30;
+    if (!Number.isFinite(cruise) || cruise <= 0) cruise = 30;
+    cruise = Math.round(cruise * 10) / 10;
+    var card = 'Your fingers keep up when the word is marked. The exam does not mark it, and the page does not follow it. This passage marks the word for 45 seconds, then takes the mark away. Only the unmarked part can count. It does not replace the two-minute check.';
+    return { cruise: cruise, card: card, line: card + ' Space locks the word. Keep the keyboard on English (US). The text uses DevLys 010.' };
+  };
+  KD.eyesStart = function (read) {
+    return {
+      phase: 'mark',
+      cruise: read && Number(read.cruise) > 0 ? Number(read.cruise) : 30,
+      wordStart: 0,
+      opened: false,
+      wordPhase: 'mark',
+      wordRescue: false,
+      streak: 0,
+      rescueNext: false,
+      words: []
+    };
+  };
+  KD.eyesEvent = function (state, event) {
+    if (!state || !event) return state;
+    var now = Number(event.now) || 0;
+    if (event.kind === 'open') {
+      state.wordStart = now;
+      state.wordPhase = state.phase;
+      state.wordRescue = !!state.rescueNext;
+      state.rescueNext = false;
+      state.opened = true;
+      return state;
+    }
+    if (event.kind === 'bare') {
+      if (state.phase !== 'bare') state.phase = 'bare';
+      return state;
+    }
+    if (event.kind === 'close') {
+      if (!state.opened) return state;
+      var keys = Math.max(1, Number(event.keys) || 1);
+      state.words.push({
+        phase: state.wordPhase,
+        rescue: !!state.wordRescue,
+        ok: !!event.ok,
+        ms: Math.max(0, now - (state.wordStart || now)),
+        keys: keys
+      });
+      if (state.wordPhase === 'bare' && !state.wordRescue) {
+        if (event.ok) state.streak = 0;
+        else {
+          state.streak += 1;
+          if (state.streak >= 2) {
+            state.rescueNext = true;
+            state.streak = 0;
+          }
+        }
+      }
+      state.opened = false;
+      return state;
+    }
+    return state;
+  };
+  function eyesPace(words) {
+    var keys = 0, ms = 0, clean = 0;
+    words.forEach(function (word) {
+      keys += word.keys;
+      ms += word.ms;
+      if (word.ok) clean += 1;
+    });
+    return {
+      wpm: ms >= 400 && keys > 0 ? Math.round(KD.msToWpm(ms / keys) * 10) / 10 : 0,
+      ms: Math.round(ms),
+      keys: keys,
+      words: words.length,
+      first: words.length ? Math.round(clean / words.length * 1000) / 10 : 0
+    };
+  }
+  KD.eyesHeld = function (state) {
+    var list = (state && state.words) || [];
+    var bare = eyesPace(list.filter(function (word) { return word.phase === 'bare' && !word.rescue; }));
+    var mark = eyesPace(list.filter(function (word) { return word.phase === 'mark' && !word.rescue; }));
+    var cruise = state ? Number(state.cruise) || 0 : 0;
+    var save = bare.words >= 8 && bare.ms >= 35000 && bare.first >= 94 && bare.wpm > 0 && bare.wpm <= 80 && bare.wpm + 0.5 >= cruise;
+    return {
+      wpm: bare.wpm, ms: bare.ms, keys: bare.keys, words: bare.words, first: bare.first, save: save,
+      gain: Math.round((bare.wpm - cruise) * 10) / 10,
+      markWpm: mark.wpm, markWords: mark.words
     };
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

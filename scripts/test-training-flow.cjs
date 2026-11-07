@@ -41,6 +41,14 @@ assert.equal(context.session.limit,25000);
 assert.equal(context.session.lesson.scoreFree,true);
 assert(context.session.steps.length>=550);
 assert.equal(context.session.practice40,undefined,'Short bursts must not count as two-minute checks');
+context.startIgnition();
+assert.equal(context.session.lesson.id,'ignition');
+assert.equal(context.session.limit,240000);
+assert.equal(context.session.lesson.scoreFree,true);
+assert.equal(context.session.practice40Weak,false);
+assert.equal(context.session.ignition.phase,'chase');
+assert(context.session.steps.length>80);
+assert.equal(context.session.practice40,undefined,'The ring must not count as a two-minute check');
 
 // A completed lesson cannot be resumed even when a stale cursor is present.
 const passage=KD.historyLesson(store);
@@ -61,4 +69,8 @@ assert.match(html,/Day 1 of 20/);
 assert.match(html,/98% first-try accuracy/);
 assert.match(html,/Your daily routine/);
 assert.match(html,/two-minute check/);
+assert.match(html,/Start the 4-minute ring/);
+assert.match(html,/data-act="ignition"/);
+assert.match(html,/Practice without the mark/);
+assert.match(html,/data-act="eyes"/);
 console.log('Training flow passed: real recovery button, varied learned words, clean-data fallback, unscored bursts, stale resume rejection and 50 WPM dashboard.');

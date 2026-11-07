@@ -738,20 +738,25 @@
       '<div class="course-bottom"><span>All ' + KD.LESSONS.length + ' lessons</span><button class="btn" data-act="jump-current">Jump to current lesson</button></div></main>';
   }
 
-  function ignitionReady() {
-    var keys = store.placedKeys || {};
-    if (Object.keys(keys).some(function (id) { return keys[id]; })) return true;
-    return Object.keys(store.learned || {}).length > 0 || Object.keys(store.stars || {}).length > 0;
-  }
-  function ignitionCardHTML() {
-    if (!KD.ignitionRead) return '';
-    var read = KD.ignitionRead(store);
-    if (!ignitionReady()) {
-      return '<div class="ignition-card"><div><b>Raise speed today</b><p>Learn the first keys. Then a 4-minute ring raises the pace for you. Two clean words, and the next word gets less time.</p></div><button class="btn" data-act="start-current">Continue learning</button></div>';
-    }
-    return '<div class="ignition-card"><div><b>Raise speed today</b><p>' + esc(read.card) + '</p></div><button class="btn" data-act="ignition">Start the 4-minute ring</button></div>';
-  }
   function practice40HTML() {
+    function ignitionReady() {
+      var keys = store.placedKeys || {};
+      if (Object.keys(keys).some(function (id) { return keys[id]; })) return true;
+      return Object.keys(store.learned || {}).length > 0 || Object.keys(store.stars || {}).length > 0;
+    }
+    function ignitionCardHTML() {
+      if (!KD.ignitionRead) return '';
+      var read = KD.ignitionRead(store);
+      if (!ignitionReady()) {
+        return '<div class="ignition-card"><div><b>Raise speed today</b><p>Learn the first keys. Then a 4-minute ring raises the pace for you. Two clean words, and the next word gets less time.</p></div><button class="btn" data-act="start-current">Continue learning</button></div>';
+      }
+      return '<div class="ignition-card"><div><b>Raise speed today</b><p>' + esc(read.card) + '</p></div><button class="btn" data-act="ignition">Start the 4-minute ring</button></div>';
+    }
+    function eyesCardHTML() {
+      if (!KD.eyesRead || !ignitionReady()) return '';
+      var read = KD.eyesRead(store);
+      return '<div class="ignition-card"><div><b>Prepare for the exam</b><p>' + esc(read.card) + '</p></div><button class="btn" data-act="eyes">Practice without the mark</button></div>';
+    }
     var state = KD.practice40State(store), last = state.last;
     var program = KD.trainingProgram(store), plan = KD.adaptivePlan(store);
     var offer = historyOffer();
@@ -767,6 +772,7 @@
     var weakNames = offer && offer.names && offer.names.length ? offer.names.join(', ') : 'your recent misses';
     return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span>' + (lastFull ? '<small title="Last two-minute check">2-min check: ' + fmt(lastFull.wpm) + ' WPM</small>' : '') + (aggSpeed != null && plan.baselineWpm != null ? '<small title="Average of every saved attempt">All-time average: ' + fmt(aggSpeed) + ' WPM</small>' : '') + '</div></div>' +
       ignitionCardHTML() +
+      eyesCardHTML() +
       '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Practice window ends ' + esc(program.endDate) + '</p>' +
       '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
       '<div><b>2. Practise your combinations</b><p>Recent errors choose the drill, with extra attention to ' + esc(weakNames) + '. A wrong Space locks the word on the exam.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button><button class="btn primary" data-act="newspaper-live" title="Fresh breaking news from Hindi newspapers">📰 ताजा समाचार</button><button class="btn" data-act="editorial-topic" title="50 curated authentic newspaper editorials (no repetition)">🗞️ संपादकीय लेख</button><button class="btn" data-act="para" title="Fresh word-lock transfer">Word-lock transfer</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic">🔍 मनपसंद विषय</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
@@ -1587,6 +1593,9 @@
     if (session.ignition && session.phase === "run") {
       banners += '<div id="ignition" class="ignition-banner" data-state="chase"><b>Ring</b><span>See the whole word, then type it before the bar empties.</span><div class="ignition-track" aria-hidden="true"><div id="ignition-ring"></div></div></div>';
     }
+    if (session.eyes && session.phase === "run") {
+      banners += '<div id="eyes" class="ignition-banner" data-state="mark"><b>Marked</b><span>The word is marked. Type it the way your fingers already can.</span></div>';
+    }
     var body = session.kind === "exact" ? exactHTML() : lockHTML();
     var pad = "";
     if (next && next.type === "alt") pad = numpadHTML(next.num);
@@ -1595,7 +1604,7 @@
       '<div class="run-top"><div><div class="kicker">' + esc(session.lesson.title) + "</div>" +
       (session.live ? liveNote() : "") +
       "</div>" +
-      '<div class="meters' + (store.settings.metrics === false || (session.lesson.scoreFree && !session.ignition) ? ' hidden' : '') + '">' + timeBit +
+      '<div class="meters' + (store.settings.metrics === false || (session.lesson.scoreFree && !session.ignition && !session.eyes) ? ' hidden' : '') + '">' + timeBit +
       '<div><b>' + fmt(wpm) + "</b><span>Key WPM</span></div>" +
       '<div><b>' + Math.round(acc) + "%</b><span>Accuracy</span></div>" +
       liveMarks + "</div></div>" +
@@ -1613,6 +1622,7 @@
     placeCaret();
     paintListen();
     if (session.ignition && session.phase === "run") paintIgnitionText();
+    if (session.eyes && session.phase === "run") paintEyesText();
   }
 
   /* A key must change the letter before the keyboard, hands, meters, or save run.
@@ -1782,7 +1792,7 @@
       var countEl = document.querySelector("#run .mock-type .mock-count");
       if (countEl && session.words) countEl.textContent = "Word " + Math.min(session.wi + 1, session.words.length) + " of " + session.words.length;
       var exam = !!session.exam;
-      var hlOn = isPassageHighlightEnabled();
+      var hlOn = passageMarkOn();
       var words = passage.querySelectorAll(".word");
       if (words.length === session.words.length) {
         for (var i = 0; i < words.length; i++) {
@@ -1944,7 +1954,7 @@
     if (mock) {
       var passage = mock.querySelector(".passage");
       var typedLine = mock.querySelector(".typed-line");
-      if (passage) {
+      if (passage && passageFollows()) {
         var pNow = passage.querySelector('.word[data-wi="' + session.wi + '"]') || passage.querySelector(".word.now");
         scrollIntoContainerView(passage, pNow);
       }
@@ -2129,6 +2139,7 @@
       var pausedFor = performance.now() - session.pausedAt;
       if (session.t0) session.t0 += pausedFor;
       if (session.ignition && session.ignition.wordStart) session.ignition.wordStart += pausedFor;
+      if (session.eyes && session.eyes.wordStart) session.eyes.wordStart += pausedFor;
       session.paused = false;
       session.autoPause = false;
       session.lastActivityAt = performance.now();
@@ -2320,6 +2331,65 @@
   function isPassageHighlightEnabled() {
     return !!(store.settings && store.settings.passageHighlight === true);
   }
+  function passageMarkOn() {
+    if (session && session.eyes) return session.eyes.phase !== "bare" || !!session.eyes.wordRescue;
+    return isPassageHighlightEnabled();
+  }
+  function passageFollows() {
+    if (!session) return false;
+    if (session.eyes) return session.eyes.phase !== "bare" || !!session.eyes.wordRescue;
+    if (session.exam && !isPassageHighlightEnabled()) return false;
+    return true;
+  }
+  function paintEyesText() {
+    var el = document.getElementById("eyes");
+    if (!el || !session || !session.eyes) return;
+    var eyes = session.eyes;
+    var title, line, state;
+    if (eyes.phase !== "bare") {
+      title = "Marked";
+      line = "The word is marked. Type it the way your fingers already can.";
+      state = "mark";
+    } else if (eyes.wordRescue) {
+      title = "Find it";
+      line = "One word is marked so you can find the place. The next word is yours.";
+      state = "rescue";
+    } else {
+      title = "Exam eyes";
+      line = "The mark is gone. Find the word yourself. This part is the exam.";
+      state = "bare";
+    }
+    var b = el.querySelector("b");
+    var span = el.querySelector("span");
+    if (b && b.textContent !== title) b.textContent = title;
+    if (span && span.textContent !== line) span.textContent = line;
+    if (el.getAttribute("data-state") !== state) el.setAttribute("data-state", state);
+  }
+  function applyPassageMarks() {
+    if (!session || session.kind !== "lock") return;
+    var passage = document.querySelector("#run .passage");
+    if (!passage) return;
+    var nodes = passage.querySelectorAll(".word");
+    if (nodes.length !== session.words.length) return;
+    var hlOn = passageMarkOn();
+    var exam = !!session.exam;
+    for (var i = 0; i < nodes.length; i++) {
+      var mark = "";
+      if (hlOn && i === session.wi) mark = "now";
+      else if (hlOn && !exam && !session.eyes && i < session.wi) mark = session.marks[i] === "ok" ? "ok" : "bad";
+      var newCls = "word" + (mark ? " " + mark : "") + (session.lang === "en" ? "" : " devlys");
+      if (nodes[i].className !== newCls) nodes[i].className = newCls;
+    }
+    passage.classList.toggle("show-highlight", !!hlOn);
+    passage.classList.toggle("no-highlight", !hlOn);
+  }
+  function eyesMaybeBare(now) {
+    if (!session || !session.eyes || session.eyes.phase !== "mark" || !session.t0 || !KD.eyesEvent) return;
+    if (now - session.t0 < KD.EYES_MARK_MS) return;
+    KD.eyesEvent(session.eyes, { kind: "bare", now: now });
+    applyPassageMarks();
+    paintEyesText();
+  }
   function isLiveWordColorEnabled() {
     return !!(store.settings && store.settings.liveWordColor === true);
   }
@@ -2327,7 +2397,7 @@
     var exam = !!session.exam;
     var cls = session.lang === "en" ? " en" : "";
     var master = "";
-    var hlOn = isPassageHighlightEnabled();
+    var hlOn = passageMarkOn();
     session.words.forEach(function (w, i) {
       var c = "";
       if (hlOn) {
@@ -2496,7 +2566,7 @@
     session.phase = "run";
     if (typeof ensureSurePace === "function") ensureSurePace();
     if (session.practice40) { session.practice40.guided = !session.practice40.full; session.t0 = performance.now(); }
-    if (session.rhythmBurst || session.ignition) session.t0 = performance.now();
+    if (session.rhythmBurst || session.ignition || session.eyes) session.t0 = performance.now();
     session.holding = true;
     paint();
     ensureTick();
@@ -2504,6 +2574,10 @@
       ignitionOpen(session.steps[0] && session.steps[0].ti >= 0 ? session.steps[0].ti : 0, session.t0);
       startIgnitionFrame();
       paintIgnitionText();
+    }
+    if (session.eyes && KD.eyesEvent) {
+      KD.eyesEvent(session.eyes, { kind: "open", now: session.t0 });
+      paintEyesText();
     }
     if (session.live) save();
   }
@@ -2517,6 +2591,7 @@
       if (session.limit && session.t0 && remain() <= 0) finish();
       else {
         if (session.ignition) ignitionMaybeKeep(performance.now());
+        if (session.eyes) eyesMaybeBare(performance.now());
         paintClock();
       }
     }, 400);
@@ -2947,12 +3022,24 @@
       rememberTap({ code: "Space", shift: false, space: true });
     }
     if (!ok) forgetTiming();
+    if (session.eyes && KD.eyesEvent) {
+      var eyesNow = performance.now();
+      if (!session.t0) session.t0 = eyesNow;
+      if (!session.eyes.opened) KD.eyesEvent(session.eyes, { kind: "open", now: eyesNow });
+      KD.eyesEvent(session.eyes, {
+        kind: "close", now: eyesNow, ok: !!ok,
+        keys: ((word && word.k) ? word.k.length : 0) + 1
+      });
+      if (eyesNow - session.t0 >= KD.EYES_MARK_MS) KD.eyesEvent(session.eyes, { kind: "bare", now: eyesNow });
+      KD.eyesEvent(session.eyes, { kind: "open", now: eyesNow });
+    }
     session.typed = "";
     session.wi++;
     if (session.wi >= session.words.length) finish();
     else {
       if (typeof paintTyping === "function") paintTyping();
       else if (typeof paintTypingSoon === "function") paintTypingSoon();
+      if (session.eyes) paintEyesText();
       if (session.live) saveSoon();
     }
   }
@@ -3120,6 +3207,31 @@
           words: (session.tokens || []).map(function (token) { return token.h; }).slice(0, 24),
           slips: [],
           sentenceIds: ['ignition-keep:' + at],
+          at: at + 1
+        });
+        if (store.live.past.length > 40) store.live.past = store.live.past.slice(-40);
+      }
+    }
+    if (session.eyes && KD.eyesHeld) {
+      var eyesHeld = KD.eyesHeld(session.eyes);
+      session.eyes.held = eyesHeld;
+      if (eyesHeld.save) {
+        if (!store.live) store.live = { past: [] };
+        store.live.past = store.live.past || [];
+        store.live.past.push({
+          id: 'eyes-keep',
+          pattern: 'eyes',
+          stars: 0,
+          acc: Math.round(eyesHeld.first),
+          realAcc: eyesHeld.first,
+          ms: eyesHeld.ms,
+          wpm: eyesHeld.wpm,
+          min: 0,
+          mid: 0,
+          high: 0,
+          words: (session.words || []).map(function (word) { return word.h; }).slice(0, 24),
+          slips: [],
+          sentenceIds: ['eyes-keep:' + at],
           at: at + 1
         });
         if (store.live.past.length > 40) store.live.past = store.live.past.slice(-40);
@@ -3755,14 +3867,51 @@
       detail = 'That sits next to your recent ' + fmt(cruise) + '. The ring reached ' + fmt(ring) + ' WPM. Another round starts between the two if this hold was saved.';
     }
     return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">4-minute ring</div><h1>' + headline + '</h1>' +
-      '<div class="ignition-result"><div><b>' + fmt(cruise) + '</b><span>Recent</span></div><div><b>' + fmt(ring) + '</b><span>Ring reached</span></div><div><b>' + heldText + '</b><span>Held, bar off</span></div></div>' +
+      speedFigures([[fmt(cruise), 'Recent'], [fmt(ring), 'Ring reached'], [heldText, 'Held, bar off']]) +
       '<p>' + detail + '</p><div class="row-btns"><button class="btn primary" data-act="ignition">Run the ring again</button><button class="btn" data-act="practice40-check">2-minute check</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
+  }
+  function speedFigures(cells) {
+    return '<div class="ignition-result" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0">' +
+      cells.map(function (cell) {
+        return '<div style="padding:12px 8px;background:#f5f8fa;text-align:center"><b style="display:block;font-size:28px;line-height:1.1;color:#3498db">' + cell[0] + '</b><span style="display:block;margin-top:4px;font-size:11px;color:#64717c;text-transform:uppercase;letter-spacing:.4px">' + cell[1] + '</span></div>';
+      }).join('') + '</div>';
+  }
+  function eyesResult() {
+    var eyes = session.eyes || {};
+    var held = eyes.held || (KD.eyesHeld ? KD.eyesHeld(eyes) : { wpm: 0, words: 0, first: 0, ms: 0, save: false, gain: 0, markWpm: 0 });
+    var cruise = eyes.cruise || 0;
+    var marked = held.markWords ? fmt(held.markWpm) : '—';
+    var bare = held.words ? fmt(held.wpm) : '—';
+    var headline, detail;
+    if (!held.words) {
+      headline = 'Stay for the unmarked part';
+      detail = 'The first 45 seconds mark the word, the way your fingers already like. After that the mark leaves. That later part is the exam, and it is the only part that can count.';
+    } else if (held.save && held.gain >= 2) {
+      headline = 'You held ' + fmt(held.wpm) + ' WPM with no mark';
+      detail = fmt(held.gain) + ' WPM above your recent ' + fmt(cruise) + ', with the word unmarked, for ' + Math.round(held.ms / 1000) + ' seconds. ' + Math.round(held.first) + '% of those words were clean. This joins your recent sessions a little. It does not replace the two-minute check or the 10-minute exam.';
+    } else if (held.first < 94) {
+      headline = 'The fingers are fine. The eyes lost the word';
+      detail = 'With the mark, that part was ' + marked + ' WPM. Without the mark, it was ' + fmt(held.wpm) + ' WPM and ' + Math.round(held.first) + '% of the words were clean. Recent speed stays put until the unmarked words are at least 94% clean.';
+    } else if (held.ms < 35000) {
+      headline = 'The unmarked part was too short';
+      detail = 'Stay after the mark leaves. A few unmarked words are not enough to count.';
+    } else if (held.wpm + 0.5 < cruise) {
+      headline = 'Without the mark, the passage was slower';
+      detail = 'With the mark, that part was ' + marked + ' WPM. Without it, ' + fmt(held.wpm) + ' WPM, slower than your recent ' + fmt(cruise) + '. Recent speed stays put. Run it again and keep your place in the passage.';
+    } else {
+      headline = 'You held ' + fmt(held.wpm) + ' WPM with no mark';
+      detail = 'That sits next to your recent ' + fmt(cruise) + '. The marked part was ' + marked + ' WPM. Another clean unmarked stretch can move recent speed a little.';
+    }
+    return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Prepare for the exam</div><h1>' + headline + '</h1>' +
+      speedFigures([[marked, 'With the mark'], [bare, 'No mark'], [fmt(cruise), 'Recent']]) +
+      '<p>' + detail + '</p><div class="row-btns"><button class="btn primary" data-act="eyes">Practice without the mark</button><button class="btn" data-act="practice40-check">2-minute check</button><button class="btn ghost" data-go="home">Practice plan</button></div></section></main>';
   }
   function resultHTML() {
     if (!session || !session.result) return '<div class="wrap"><div class="card">No result.</div></div>';
     if (session.live && (!store.live || !store.live.lesson)) ensureLive();
     var r = session.result;
     if (session.placement) return placementResult(r);
+    if (session.eyes) return eyesResult();
     if (session.ignition) return ignitionResult();
     if (session.rhythmBurst) {
       return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><h1>Rhythm practice complete</h1>' +
@@ -4041,6 +4190,7 @@
     if (name === 'practice40-weak') { startWeak(); return; }
     if (name === 'rhythm-burst') { startRhythmBurst(); return; }
     if (name === 'ignition') { startIgnition(); return; }
+    if (name === 'eyes') { startEyes(); return; }
     if (name === 'repair') { if (session && session.recovery && session.index >= 0) startLesson(session.index, session.recovery); return; }
     if (name === 'return-course') { if (session && session.recoveryFor != null) startLesson(session.recoveryFor); return; }
     if (name === 'lesson-history') { screen = 'lesson'; draw(); return; }
@@ -4217,6 +4367,7 @@
     if (name === "retry") {
       if (session && session.live) { startLive('repeat'); return; }
       if (session && session.ignition) { startIgnition(); return; }
+      if (session && session.eyes) { startEyes(); return; }
       if (session && session.rhythmBurst) { startRhythmBurst(); return; }
       if (session && session.practice40Weak) { act("practice40-weak"); return; }
       if (session && session.recoveryFor != null) { var index = session.recoveryFor; startLesson(index, KD.buildRecovery(KD.LESSONS[index], store, [])); }
@@ -4674,6 +4825,27 @@
     session.lesson.scoreFree = true;
     session.lesson.teach = read.line;
     session.index = -1;
+    paintShell();
+  }
+
+  function startEyes() {
+    var read = KD.eyesRead ? KD.eyesRead(store) : { cruise: 30, line: 'The mark leaves after 45 seconds. Only the unmarked part can count. It does not replace the two-minute check.' };
+    startLock({
+      id: 'eyes',
+      title: 'Prepare for the exam',
+      teach: read.line,
+      words: KD.buildHindiPassage(160),
+      limit: KD.EYES_TOTAL_MS || 240000,
+      hints: 'none',
+      showFix: false,
+      lang: 'hi',
+      exam: false,
+      finger: 'DevLys / Kruti'
+    });
+    if (!session || !session.words || !session.words.length) return;
+    session.lesson.scoreFree = true;
+    session.lesson.stage = 'eyes';
+    session.eyes = KD.eyesStart(read);
     paintShell();
   }
 

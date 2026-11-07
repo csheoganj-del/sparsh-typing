@@ -287,6 +287,28 @@ body.fit .bump-dot { background: currentColor; width: 10px; height: 2px; }
 .practice-bar .cloud-status { font-size: 10px; max-width: 120px; }
 @media (max-width: 640px) { .practice-bar .cloud-status { max-width: 65px; } .account-nav .cloud-status { max-width: 110px; } }
 @media (max-width: 640px) { .practice40 { padding: 18px; } .practice40-routine { grid-template-columns: 1fr; gap: 20px; } .practice40-speed { min-width: 80px; } }
+.ignition-card { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin: 16px 0 4px; padding: 14px 16px; background: #102033; color: #f4f7fb; border-radius: 10px; }
+.ignition-card b { display: block; font-size: 16px; }
+.ignition-card p { color: #c5d0dc; margin: 4px 0 0; max-width: 62ch; }
+.ignition-card .btn { flex: none; background: #3498db; color: #fff; border-color: #3498db; white-space: nowrap; }
+.ignition-card .btn:hover { background: #217dbb; }
+.ignition-banner { margin-bottom: 10px; padding: 8px 12px; border-radius: 12px; border: 1px solid #c5d8ea; background: #f2f8fc; font-size: 14px; line-height: 1.4; }
+.ignition-banner b { font-variant-numeric: tabular-nums; }
+.ignition-banner span { margin-left: 8px; }
+.ignition-banner.slip, .ignition-banner[data-state="slip"] { background: var(--bad-bg); border-color: #f3c2be; }
+.ignition-banner[data-state="keep"] { background: #e8f6ee; border-color: #b7e0c6; }
+.ignition-track { height: 8px; margin-top: 8px; background: #d5e3ee; border-radius: 99px; overflow: hidden; }
+.ignition-ring { height: 100%; width: 100%; background: #3498db; transform-origin: left center; transform: scaleX(1); }
+#run[data-ignition="keep"] .ignition-track { display: none; }
+#run[data-ignition="chase"] .box.now::after,
+#run[data-ignition="late"] .box.now::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 3px; border-radius: 2px; background: #3498db; transform: scaleX(var(--ring, 1)); transform-origin: left center; pointer-events: none; }
+#run[data-ignition="late"] .box.now::after,
+#run[data-ignition="late"] .ignition-ring { background: #d97706; }
+.ignition-result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+.ignition-result div { padding: 12px 8px; background: #f5f8fa; text-align: center; }
+.ignition-result b { display: block; font-size: 28px; color: #3498db; font-variant-numeric: tabular-nums; }
+.ignition-result span { font-size: 11px; color: #64717c; text-transform: uppercase; letter-spacing: 0.4px; }
+@media (max-width: 640px) { .ignition-card { flex-direction: column; align-items: stretch; } .ignition-card .btn { width: 100%; text-align: center; } .ignition-result b { font-size: 22px; } }
 
 /* Typing latency: no animated repaint on every key, and keep stage layout local. */
 body.fit .tc-progress-fill { transition: none; }
