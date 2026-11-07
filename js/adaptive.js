@@ -281,9 +281,12 @@
   function savedActivity(store) {
     var rows = [], seen = {};
     function add(row, id) {
-      if (!row || !row.at || seen[row.at] || !(row.ms > 0)) return;
-      seen[row.at] = true;
+      if (!row || !row.at || !(row.ms > 0)) return;
       id = id || row.id || '';
+      // The unpaced hold is stored again for speed. Minutes stay on the session log.
+      if (id === 'ignition-keep') return;
+      if (seen[row.at]) return;
+      seen[row.at] = true;
       rows.push({ at: row.at, ms: row.ms, kind: id === 'practice40' ? 'check' : /^exam-/.test(id) ? 'exam' :
         /^(adaptive|repair-|weak|coach)/.test(id) || row.adaptive ? 'drill' : 'lesson' });
     }
@@ -368,5 +371,190 @@
       qualifyingChecks: lastThree.filter(function (row) { return row.wpm >= goal && row.acc >= 98 && row.realAcc >= 98; }).length,
       note: 'The ' + duration + '-day calendar is a practice plan, not a prediction. Checkpoints rise 2 WPM at a time from the measured check, and the end date is not a promise of the goal. ' +
         (estimated ? 'The starting ' + Math.round(baseline) + ' WPM is an estimate until your first typing sessions are recorded.' : 'Your pace follows recent practice. The ' + goal + ' WPM goal still needs three clean two-minute passages.') };
+  };
+
+  /* The ring raises the pace by itself. Two clean, on-time words shorten the
+     per-key budget 6%. A miss lengthens it 10%. A late clean word lengthens it 4%.
+     The budget stays inside 4 WPM under the recent pace and 18 WPM over it, and never past 50. */
+  KD.IGNITION_CHASE_MS = 150000;
+  KD.IGNITION_TOTAL_MS = 240000;
+  KD.wpmToMs = function (wpm) {
+    var n = Number(wpm);
+    if (!Number.isFinite(n) || n < 8) n = 8;
+    if (n > 80) n = 80;
+    return 12000 / n;
+  };
+  KD.msToWpm = function (ms) {
+    var n = Number(ms);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return 12000 / n;
+  };
+  function surePressMs(store) {
+    var samples = [];
+    var keys = (((store || {}).mastery || {}).keys) || {};
+    Object.keys(keys).forEach(function (id) {
+      if (!id || id === 'Space') return;
+      var list = (keys[id] && keys[id].samples) || [];
+      list.forEach(function (sample) {
+        if (sample && sample.ok && sample.ms >= 50 && sample.ms <= 1600) samples.push(sample.ms);
+      });
+    });
+    if (samples.length < 20) return null;
+    samples.sort(function (a, b) { return a - b; });
+    var index = (samples.length - 1) * 0.25;
+    var low = Math.floor(index), high = Math.min(samples.length - 1, low + 1);
+    return samples[low] + (samples[high] - samples[low]) * (index - low);
+  }
+  function latestHold(store, now) {
+    var past = (store && store.live && store.live.past) || [];
+    var found = null;
+    for (var i = 0; i < past.length; i++) {
+      var row = past[i];
+      if (!row || row.id !== 'ignition-keep' || !(row.wpm > 0) || !(row.at > 0)) continue;
+      if (now - row.at > 12 * 60 * 60 * 1000) continue;
+      if (!found || row.at >= found.at) found = row;
+    }
+    return found;
+  }
+  KD.ignitionRead = function (store, now) {
+    store = store || {};
+    now = now == null ? Date.now() : Number(now);
+    if (!Number.isFinite(now)) now = Date.now();
+    var plan = KD.adaptivePlan(store);
+    var cruise = plan.baselineWpm != null ? Number(plan.baselineWpm) : 30;
+    if (!Number.isFinite(cruise) || cruise <= 0) cruise = 30;
+    cruise = Math.round(cruise * 10) / 10;
+    var fastest = Math.min(50, cruise + 18);
+    var slowest = Math.max(18, cruise - 4);
+    var burst = null;
+    var quick = surePressMs(store);
+    if (quick) {
+      var quickWpm = Math.round(KD.msToWpm(quick) * 10) / 10;
+      if (quickWpm >= cruise + 6) burst = quickWpm;
+    }
+    var hold = latestHold(store, now);
+    var start = cruise;
+    var lifted = false;
+    if (hold && hold.wpm > cruise + 1) {
+      start = (cruise + Number(hold.wpm)) / 2;
+      lifted = start > cruise + 0.4;
+    }
+    start = Math.max(slowest, Math.min(fastest, start));
+    var paceMs = KD.wpmToMs(start);
+    var card = burst != null
+      ? 'Quick presses near ' + Math.round(burst) + ' WPM. Recent speed ' + Math.round(cruise) + '. The gap is the pause. Two clean words, and the next word gets less time.'
+      : 'Recent speed is ' + Math.round(cruise) + ' WPM. Two clean words, and the next word gets less time. The last minute has no bar, and that minute is the speed that counts.';
+    var line = burst != null
+      ? 'Your quick presses already move near ' + Math.round(burst) + ' WPM. Recent speed is ' + Math.round(cruise) + ' because of the pauses between them. '
+      : 'Recent speed is ' + Math.round(cruise) + ' WPM. ';
+    line += 'A bar under each word shrinks. Two clean words make the next bar shorter. You do not pick the speed. The words repeat so the fingers can stop planning each letter. After two and a half minutes the bar leaves. The minute you hold without it is the speed that can count. It does not replace the two-minute check.';
+    if (lifted) {
+      var started = ' This round starts at ' + Math.round(start) + ' WPM, between your recent speed and the pace you just held.';
+      card += started;
+      line += started;
+    }
+    return {
+      cruise: cruise, burst: burst, tax: burst != null ? Math.round((burst - cruise) * 10) / 10 : null,
+      paceMs: paceMs, floorMs: KD.wpmToMs(fastest), ceilMs: KD.wpmToMs(slowest),
+      lifted: lifted, card: card, line: line
+    };
+  };
+  KD.ignitionStart = function (read) {
+    read = read || {};
+    var floorMs = Number(read.floorMs);
+    var ceilMs = Number(read.ceilMs);
+    var paceMs = Number(read.paceMs);
+    if (!Number.isFinite(floorMs) || floorMs <= 0) floorMs = KD.wpmToMs(50);
+    if (!Number.isFinite(ceilMs) || ceilMs <= 0) ceilMs = KD.wpmToMs(22);
+    if (!Number.isFinite(paceMs) || paceMs <= 0) paceMs = KD.wpmToMs(30);
+    if (floorMs > ceilMs) { var swap = floorMs; floorMs = ceilMs; ceilMs = swap; }
+    paceMs = Math.max(floorMs, Math.min(ceilMs, paceMs));
+    return {
+      phase: 'chase', paceMs: paceMs, floorMs: floorMs, ceilMs: ceilMs,
+      cruise: Number(read.cruise) > 0 ? Number(read.cruise) : KD.msToWpm(paceMs),
+      burst: read.burst == null ? null : Number(read.burst),
+      streak: 0, cleanRun: 0, tightenings: 0, wordStart: 0, wordTi: -1,
+      dirty: false, opened: false, skipWord: false, words: [], bestPaceMs: paceMs, budgetKeys: 1
+    };
+  };
+  KD.ignitionEvent = function (state, event) {
+    if (!state || !event) return state;
+    var now = Number(event.now) || 0;
+    if (event.kind === 'miss') {
+      state.dirty = true;
+      state.streak = 0;
+      state.cleanRun = 0;
+      return state;
+    }
+    if (event.kind === 'open') {
+      state.wordStart = now;
+      state.wordTi = event.ti == null ? -1 : event.ti;
+      state.dirty = false;
+      state.opened = true;
+      return state;
+    }
+    if (event.kind === 'keep') {
+      if (state.phase !== 'keep') {
+        state.phase = 'keep';
+        state.skipWord = !!state.opened;
+        state.streak = 0;
+      }
+      return state;
+    }
+    if (event.kind === 'close') {
+      if (state.skipWord) {
+        state.skipWord = false;
+        state.opened = false;
+        state.dirty = false;
+        return state;
+      }
+      if (!state.opened) return state;
+      var keys = Math.max(1, Number(event.keys) || 1);
+      var ms = Math.max(0, now - (Number(state.wordStart) || 0));
+      var late = ms > keys * state.paceMs;
+      var clean = !state.dirty && !event.dirty;
+      state.words.push({ phase: state.phase, clean: clean, late: late, ms: ms, keys: keys });
+      if (state.phase === 'chase') {
+        if (!clean) {
+          state.streak = 0;
+          state.cleanRun = 0;
+          state.paceMs = Math.min(state.ceilMs, state.paceMs * 1.1);
+        } else if (late) {
+          state.streak = 0;
+          state.paceMs = Math.min(state.ceilMs, state.paceMs * 1.04);
+        } else {
+          state.streak += 1;
+          state.cleanRun += 1;
+          if (state.streak >= 2) {
+            state.paceMs = Math.max(state.floorMs, state.paceMs * 0.94);
+            state.streak = 0;
+            state.tightenings += 1;
+            if (state.paceMs < state.bestPaceMs) state.bestPaceMs = state.paceMs;
+          }
+        }
+      }
+      state.opened = false;
+      state.dirty = false;
+      return state;
+    }
+    return state;
+  };
+  KD.ignitionHeld = function (state) {
+    var words = ((state && state.words) || []).filter(function (word) { return word.phase === 'keep'; });
+    var keys = 0, ms = 0, clean = 0;
+    words.forEach(function (word) {
+      keys += word.keys;
+      ms += word.ms;
+      if (word.clean) clean += 1;
+    });
+    var wpm = ms >= 400 && keys > 0 ? Math.round(KD.msToWpm(ms / keys) * 10) / 10 : 0;
+    var first = words.length ? Math.round(clean / words.length * 1000) / 10 : 0;
+    var cruise = state ? Number(state.cruise) || 0 : 0;
+    var save = words.length >= 8 && ms >= 35000 && first >= 94 && wpm > 0 && wpm <= 80 && wpm + 0.5 >= cruise;
+    return {
+      wpm: wpm, ms: Math.round(ms), keys: keys, words: words.length, first: first, save: save,
+      gain: Math.round((wpm - cruise) * 10) / 10,
+      paceWpm: state ? Math.round(KD.msToWpm(state.bestPaceMs) * 10) / 10 : 0
+    };
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

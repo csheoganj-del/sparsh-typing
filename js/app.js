@@ -532,6 +532,7 @@
   }
   function go(name) {
     stopTick();
+    stopIgnitionFrame();
     stopPlayback();
     playState = null;
     if (session && session.live && session.phase !== "done") save();
@@ -737,6 +738,19 @@
       '<div class="course-bottom"><span>All ' + KD.LESSONS.length + ' lessons</span><button class="btn" data-act="jump-current">Jump to current lesson</button></div></main>';
   }
 
+  function ignitionReady() {
+    var keys = store.placedKeys || {};
+    if (Object.keys(keys).some(function (id) { return keys[id]; })) return true;
+    return Object.keys(store.learned || {}).length > 0 || Object.keys(store.stars || {}).length > 0;
+  }
+  function ignitionCardHTML() {
+    if (!KD.ignitionRead) return '';
+    var read = KD.ignitionRead(store);
+    if (!ignitionReady()) {
+      return '<div class="ignition-card"><div><b>Raise speed today</b><p>Learn the first keys. Then a 4-minute ring raises the pace for you. Two clean words, and the next word gets less time.</p></div><button class="btn" data-act="start-current">Continue learning</button></div>';
+    }
+    return '<div class="ignition-card"><div><b>Raise speed today</b><p>' + esc(read.card) + '</p></div><button class="btn" data-act="ignition">Start the 4-minute ring</button></div>';
+  }
   function practice40HTML() {
     var state = KD.practice40State(store), last = state.last;
     var program = KD.trainingProgram(store), plan = KD.adaptivePlan(store);
@@ -752,9 +766,10 @@
     var goalWpm = program.goalWpm || 50;
     var weakNames = offer && offer.names && offer.names.length ? offer.names.join(', ') : 'your recent misses';
     return '<section class="practice40" aria-label="Hindi practice to ' + goalWpm + ' WPM"><div class="practice40-head"><div><span class="kicker">Day ' + program.day + ' of 20 · ' + esc(program.phase) + '</span><h2>Hindi · ' + goalWpm + ' WPM</h2><p>' + esc(state.reached ? goalWpm + ' WPM repeated on three fresh passages with at least 98% first-try accuracy.' : plan.note) + '</p><div class="goal-picker"><button class="btn tiny' + (goalWpm === 45 ? ' primary' : ' ghost') + '" data-act="set-goal-45">45 WPM goal</button><button class="btn tiny' + (goalWpm === 50 ? ' primary' : ' ghost') + '" data-act="set-goal-50">50 WPM goal</button></div></div><div class="practice40-speed"><b>' + (shownWpm != null ? fmt(shownWpm) : '—') + '</b><span>' + shownLabel + '</span>' + (lastFull ? '<small title="Last two-minute check">2-min check: ' + fmt(lastFull.wpm) + ' WPM</small>' : '') + (aggSpeed != null && plan.baselineWpm != null ? '<small title="Average of every saved attempt">All-time average: ' + fmt(aggSpeed) + ' WPM</small>' : '') + '</div></div>' +
+      ignitionCardHTML() +
       '<p class="training-goal">Next practice pace: <b>' + program.nextTargetWpm + ' WPM</b> · 98% first-try accuracy · Practice window ends ' + esc(program.endDate) + '</p>' +
       '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
-      '<div><b>2. Practise your combinations</b><p>Recent errors choose the drill, with extra attention to ' + esc(weakNames) + '. A wrong Space locks the word on the exam.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button><button class="btn" data-act="para" title="Fetch fresh unseen paragraph">Word-lock transfer</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic from internet or news">🌐 Choose Topic</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
+      '<div><b>2. Practise your combinations</b><p>Recent errors choose the drill, with extra attention to ' + esc(weakNames) + '. A wrong Space locks the word on the exam.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button><button class="btn primary" data-act="newspaper-live" title="Fresh breaking news from Hindi newspapers">📰 ताजा समाचार</button><button class="btn" data-act="editorial-topic" title="50 curated authentic newspaper editorials (no repetition)">🗞️ संपादकीय लेख</button><button class="btn" data-act="para" title="Fresh word-lock transfer">Word-lock transfer</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic">🔍 मनपसंद विषय</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
       '<div><b>3. Speed Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div>' +
       '<div><b>4. RSSB Exam Simulation</b><p>Real exam scenario: 400 words on Rajasthan geography, culture & ecology. DevLys 010. Space locks word. 25 Marks (Cutoff: 9/25).</p><button class="btn primary" data-act="exam-hi">10-Min Full Exam</button><button class="btn ghost" data-act="exam-hi-5min">5-Min Mini Exam</button>' + (store.bestHi ? '<p class="small muted" style="margin-top:6px;">Best: <b>' + fmt(store.bestHi.marks) + ' / 25 Marks</b> (' + store.bestHi.correct + ' correct)</p>' : '') + '</div></div>' +
       '<p class="small muted">' + (program.today.recordedMinutes || 0) + ' recorded practice minutes today across all devices. Goal: 98% first-try accuracy on fresh passages, building toward ' + goalWpm + ' WPM.</p>' +
@@ -1569,6 +1584,9 @@
     if (!session.lesson.scoreFree && session.phase === "run") {
       banners += '<div id="live-listen" class="live-listen listen" data-state="listen"><b aria-hidden="true">— WPM · 100% first try</b><span aria-live="polite">I\'m listening. Type the first words at a sure pace.</span></div>';
     }
+    if (session.ignition && session.phase === "run") {
+      banners += '<div id="ignition" class="ignition-banner" data-state="chase"><b>Ring</b><span>See the whole word, then type it before the bar empties.</span><div class="ignition-track" aria-hidden="true"><div id="ignition-ring"></div></div></div>';
+    }
     var body = session.kind === "exact" ? exactHTML() : lockHTML();
     var pad = "";
     if (next && next.type === "alt") pad = numpadHTML(next.num);
@@ -1577,7 +1595,7 @@
       '<div class="run-top"><div><div class="kicker">' + esc(session.lesson.title) + "</div>" +
       (session.live ? liveNote() : "") +
       "</div>" +
-      '<div class="meters' + (store.settings.metrics === false || session.lesson.scoreFree ? ' hidden' : '') + '">' + timeBit +
+      '<div class="meters' + (store.settings.metrics === false || (session.lesson.scoreFree && !session.ignition) ? ' hidden' : '') + '">' + timeBit +
       '<div><b>' + fmt(wpm) + "</b><span>Key WPM</span></div>" +
       '<div><b>' + Math.round(acc) + "%</b><span>Accuracy</span></div>" +
       liveMarks + "</div></div>" +
@@ -1594,6 +1612,7 @@
     revealCurrent();
     placeCaret();
     paintListen();
+    if (session.ignition && session.phase === "run") paintIgnitionText();
   }
 
   /* A key must change the letter before the keyboard, hands, meters, or save run.
@@ -1973,6 +1992,7 @@
   }
   /* Typing feedback is synchronous for instantaneous screen updates. */
   var typingFrame = 0;
+  var ignitionFrame = 0;
   function paintTypingSoon() {
     paintTyping();
   }
@@ -2063,9 +2083,11 @@
     if (session.kind === "lock") first = null;
     var isParaOrExam = session.lesson && (session.lesson.id === "para" || /^exam-/.test(session.lesson.id));
     var dynamicBar = isParaOrExam
-      ? '<div style="margin:12px auto 8px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;max-width:600px;">' +
-          '<button class="btn ghost small" data-act="next-dynamic-para" title="Fetch a completely fresh random internet topic" style="border:1px solid var(--accent, #38bdf8);color:var(--accent, #38bdf8);font-size:13px;padding:6px 14px;border-radius:16px;">🎲 नया विषय लोड करें (Fresh Internet Topic)</button>' +
-          '<button class="btn ghost small" data-act="prompt-topic" title="Enter any custom topic (e.g. Chandrayaan, Rajasthan Forts, Cricket, AI)" style="border:1px solid var(--muted, #94a3b8);color:var(--text, #f8fafc);font-size:13px;padding:6px 14px;border-radius:16px;">🌐 मनपसंद विषय टाइप करें (Choose Custom Topic)</button>' +
+      ? '<div style="margin:12px auto 8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;max-width:760px;">' +
+          '<button class="btn ghost small" data-act="newspaper-live" title="Live newspaper headlines and news stories from Dainik Bhaskar, Amar Ujala, BBC Hindi" style="border:1px solid #10b981;color:#10b981;font-size:13px;padding:6px 13px;border-radius:16px;cursor:pointer;">📰 ताजा समाचार (Live News)</button>' +
+          '<button class="btn ghost small" data-act="editorial-topic" title="Load an unseen real Hindi newspaper editorial (50 topics, zero repetition)" style="border:1px solid #f59e0b;color:#f59e0b;font-size:13px;padding:6px 13px;border-radius:16px;cursor:pointer;">🗞️ संपादकीय लेख (50 Editorials)</button>' +
+          '<button class="btn ghost small" data-act="next-dynamic-para" title="Fetch a completely fresh random internet web article" style="border:1px solid var(--accent, #38bdf8);color:var(--accent, #38bdf8);font-size:13px;padding:6px 13px;border-radius:16px;cursor:pointer;">🎲 नया विषय (Fresh Web Topic)</button>' +
+          '<button class="btn ghost small" data-act="prompt-topic" title="Enter any custom topic (e.g. internet, sports, Rajasthan Forts, AI)" style="border:1px solid var(--muted, #94a3b8);color:var(--text, #f8fafc);font-size:13px;padding:6px 13px;border-radius:16px;cursor:pointer;">🔍 मनपसंद विषय (Search Topic)</button>' +
         '</div>'
       : '';
     return '<div class="lesson-ready"><p>' + esc(L.teach || 'Keep your fingers on the home row. Follow the highlighted key.') + '</p>' + (L.source === 'practice-fallback' ? '<p>AI is unavailable. This is a sentence from the practice pool.</p>' : '') + '<p>Keep your computer’s keyboard input on English (US). The practice text uses DevLys 010.</p>' +
@@ -2102,8 +2124,11 @@
       session.altDown = false;
       session.altBuf = '';
       stopTick();
+      stopIgnitionFrame();
     } else {
-      if (session.t0) session.t0 += performance.now() - session.pausedAt;
+      var pausedFor = performance.now() - session.pausedAt;
+      if (session.t0) session.t0 += pausedFor;
+      if (session.ignition && session.ignition.wordStart) session.ignition.wordStart += pausedFor;
       session.paused = false;
       session.autoPause = false;
       session.lastActivityAt = performance.now();
@@ -2111,6 +2136,7 @@
       if (session.phase === 'run') ensureTick();
     }
     paint();
+    if (session && session.ignition && !session.paused && session.phase === 'run') startIgnitionFrame();
   }
 
   function formedHTML() {
@@ -2358,14 +2384,127 @@
     });
   }
 
+  function stopIgnitionFrame() {
+    if (ignitionFrame) cancelAnimationFrame(ignitionFrame);
+    ignitionFrame = 0;
+  }
+  function startIgnitionFrame() {
+    stopIgnitionFrame();
+    function frame() {
+      ignitionFrame = 0;
+      if (!session || !session.ignition || session.phase !== "run" || session.paused) return;
+      paintIgnitionRing();
+      ignitionFrame = requestAnimationFrame(frame);
+    }
+    ignitionFrame = requestAnimationFrame(frame);
+  }
+  function ignitionOpen(ti, now) {
+    var ig = session.ignition;
+    KD.ignitionEvent(ig, { kind: "open", now: now, ti: ti });
+    var token = session.tokens[ti];
+    var letters = token && token.k && KD.stepsFromKruti ? KD.stepsFromKruti(token.k).length : 1;
+    ig.budgetKeys = Math.max(1, letters) + 1;
+  }
+  function ignitionEnsureText() {
+    var ig = session.ignition;
+    if (!ig || !ig.base || !ig.base.length || session.tokens.length > 400) return;
+    if (session.steps.length - session.i > 80) return;
+    var add = ig.base.map(function (token) { return Object.assign({}, token); });
+    session.tokens = session.tokens.concat(add);
+    session.lesson.tokens = session.tokens;
+    session.steps = KD.buildSteps(session.tokens);
+    session.words = session.tokens.map(function (token) { return { h: token.h, k: token.k, lang: "hi" }; });
+  }
+  function ignitionMaybeKeep(now) {
+    var ig = session.ignition;
+    if (!ig || ig.phase !== "chase" || !session.t0) return;
+    if (now - session.t0 < KD.IGNITION_CHASE_MS) return;
+    KD.ignitionEvent(ig, { kind: "keep", now: now });
+    var run = document.getElementById("run");
+    if (run) run.setAttribute("data-ignition", "keep");
+    paintIgnitionText();
+  }
+  function paintIgnitionText() {
+    var el = document.getElementById("ignition");
+    var ig = session && session.ignition;
+    if (!el || !ig) return;
+    var pace = Math.round(KD.msToWpm(ig.paceMs));
+    var nums, line, state;
+    if (ig.phase === "keep") {
+      nums = "Bar off · hold " + pace;
+      line = "The bar is off. Same words. Keep that pace.";
+      state = "keep";
+    } else if (ig.dirty) {
+      nums = "Ring " + pace + " WPM";
+      line = "Clean this word. The ring will not speed up on a miss.";
+      state = "slip";
+    } else if (ig.burst) {
+      nums = "Ring " + pace + " · quick presses " + Math.round(ig.burst);
+      line = ig.tightenings ? "The ring has tightened " + ig.tightenings + " times. Two more clean words and it tightens again." : "Your quick presses are already faster. Type the whole word before the bar empties.";
+      state = "chase";
+    } else {
+      nums = "Ring " + pace + " WPM";
+      line = ig.tightenings ? "The ring has tightened " + ig.tightenings + " times. Two clean words and the next word gets less time." : "See the whole word, then type it before the bar empties.";
+      state = "chase";
+    }
+    if (el.getAttribute("data-state") !== state) el.setAttribute("data-state", state);
+    var speed = el.querySelector("b");
+    var copy = el.querySelector("span");
+    if (speed && speed.textContent !== nums) speed.textContent = nums;
+    if (copy && copy.textContent !== line) copy.textContent = line;
+  }
+  function paintIgnitionRing() {
+    var run = document.getElementById("run");
+    var ig = session.ignition;
+    if (!run || !ig) return;
+    if (ig.phase !== "chase" || !ig.opened) {
+      if (run.getAttribute("data-ignition") !== ig.phase) run.setAttribute("data-ignition", ig.phase);
+      run.style.setProperty("--ring", "0");
+      return;
+    }
+    var budget = Math.max(ig.paceMs, (ig.budgetKeys || 2) * ig.paceMs);
+    var left = 1 - (performance.now() - ig.wordStart) / budget;
+    if (left < 0) left = 0;
+    if (left > 1) left = 1;
+    var state = left <= 0 ? "late" : "chase";
+    if (run.getAttribute("data-ignition") !== state) run.setAttribute("data-ignition", state);
+    var scale = left.toFixed(3);
+    run.style.setProperty("--ring", scale);
+    var ring = document.getElementById("ignition-ring");
+    if (ring) ring.style.transform = "scaleX(" + scale + ")";
+  }
+  function ignitionNote(step) {
+    if (!session || !session.ignition || session.phase !== "run") return;
+    var ig = session.ignition;
+    var now = performance.now();
+    if (!ig.opened) ignitionOpen(step && step.ti >= 0 ? step.ti : 0, now);
+    if (step && step.space) {
+      KD.ignitionEvent(ig, {
+        kind: "close", now: now, keys: ig.budgetKeys || 1,
+        dirty: !!(session.badTokens && ig.wordTi >= 0 && session.badTokens[ig.wordTi])
+      });
+      var next = session.steps[session.i];
+      if (next) ignitionOpen(next.ti >= 0 ? next.ti : 0, now);
+      ignitionEnsureText();
+      ignitionMaybeKeep(now);
+      paintIgnitionText();
+      return;
+    }
+    KD.ignitionEvent(ig, { kind: "hit", now: now });
+  }
   function beginRun() {
     session.phase = "run";
     if (typeof ensureSurePace === "function") ensureSurePace();
     if (session.practice40) { session.practice40.guided = !session.practice40.full; session.t0 = performance.now(); }
-    if (session.rhythmBurst) session.t0 = performance.now();
+    if (session.rhythmBurst || session.ignition) session.t0 = performance.now();
     session.holding = true;
     paint();
     ensureTick();
+    if (session.ignition) {
+      ignitionOpen(session.steps[0] && session.steps[0].ti >= 0 ? session.steps[0].ti : 0, session.t0);
+      startIgnitionFrame();
+      paintIgnitionText();
+    }
     if (session.live) save();
   }
   function ensureTick() {
@@ -2376,7 +2515,10 @@
         togglePause(); session.autoPause = true; return;
       }
       if (session.limit && session.t0 && remain() <= 0) finish();
-      else paintClock();
+      else {
+        if (session.ignition) ignitionMaybeKeep(performance.now());
+        paintClock();
+      }
     }, 400);
   }
 
@@ -2439,6 +2581,14 @@
   function miss(code, info, holdPaint) {
     session.errors++;
     noteListen(false, 0, false);
+    if (session.ignition && session.phase === "run") {
+      if (!session.ignition.opened) {
+        var liveStep = currentStep();
+        ignitionOpen(liveStep && liveStep.ti >= 0 ? liveStep.ti : 0, performance.now());
+      }
+      KD.ignitionEvent(session.ignition, { kind: "miss", now: performance.now() });
+      paintIgnitionText();
+    }
     var expected = currentStep();
     recordSkill(expected, false);
     forgetTiming();
@@ -2466,6 +2616,7 @@
     session.correct++;
     if (!session.t0) session.t0 = performance.now();
     session.i++;
+    if (session.ignition) ignitionNote(stepNow);
     if (session.i >= session.steps.length) {
       beepLater(true);
       finish();
@@ -2642,6 +2793,7 @@
         if (previousPosition && previousPosition.valid) session.correct = Math.max(0, session.correct - 1);
         recordPosition(step, false, true);
         noteListen(false, 0, false);
+        if (session.ignition) KD.ignitionEvent(session.ignition, { kind: "miss", now: performance.now() });
         session.i--;
         refreshTokenErrors(session.steps[session.i].ti);
         forgetTiming(); paintTyping();
@@ -2807,6 +2959,7 @@
 
   function finish() {
     stopTick();
+    stopIgnitionFrame();
     session.phase = "done";
     var ms = session.practice40 ? Math.min(session.limit, elapsed()) : elapsed();
     if (session.placement) applyPlacement();
@@ -3596,7 +3749,7 @@
     return '<div class="wrap narrow result-page"><section class="card result-card"><div class="kicker">' + esc(session.lesson.title) + "</div>" +
       rssbScorecardHTML(r, session) +
       (list ? '<h3>Words that fell</h3><ul class="wrong-list">' + list + "</ul>" : "") +
-      '<div class="row-btns"><button class="btn primary" data-act="retry">Again</button><button class="btn" data-act="para" title="Fetch a new topic from internet">New Internet Passage</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic">🌐 Choose Topic</button><button class="btn" data-go="home">Practice Dashboard</button></div></section></div>';
+      '<div class="row-btns"><button class="btn primary" data-act="retry">Again</button><button class="btn" data-act="newspaper-live" title="Fresh breaking news from Hindi newspapers">📰 ताजा समाचार</button><button class="btn" data-act="editorial-topic" title="50 curated authentic newspaper editorials">🗞️ संपादकीय लेख</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic">🔍 मनपसंद विषय</button><button class="btn" data-go="home">Practice Dashboard</button></div></section></div>';
   }
 
   function placementResult(r) {
@@ -3960,10 +4113,22 @@
       startDynamicPassage(null, 110, 0, "hi");
       return;
     }
+    if (name === "newspaper-live") {
+      var isExN = session && session.exam ? (session.limit >= 600000 ? 10 : 5) : 0;
+      var wCountN = isExN ? (isExN === 5 ? 200 : 400) : 110;
+      startDynamicPassage("newspaper", wCountN, isExN, (session && session.lang) || "hi");
+      return;
+    }
+    if (name === "editorial-topic") {
+      var isExE = session && session.exam ? (session.limit >= 600000 ? 10 : 5) : 0;
+      var wCountE = isExE ? (isExE === 5 ? 200 : 400) : 110;
+      startDynamicPassage("editorial", wCountE, isExE, (session && session.lang) || "hi");
+      return;
+    }
     if (name === "next-dynamic-para") {
       var isEx = session && session.exam ? (session.limit >= 600000 ? 10 : 5) : 0;
       var wCount = isEx ? (isEx === 5 ? 200 : 400) : 110;
-      startDynamicPassage(null, wCount, isEx, (session && session.lang) || "hi");
+      startDynamicPassage("web-article", wCount, isEx, (session && session.lang) || "hi");
       return;
     }
     if (name === "prompt-topic") {
@@ -4050,6 +4215,8 @@
 
   function cleanHindiProse(text) {
     return String(text || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&[a-zA-Z0-9#]+;/g, " ")
       .replace(/==.*?==/g, " ")
       .replace(/\([^\)]*\)/g, " ")
       .replace(/\[\d+\]/g, " ")
@@ -4061,6 +4228,8 @@
 
   function cleanEnglishProse(text) {
     return String(text || "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&[a-zA-Z0-9#]+;/g, " ")
       .replace(/==.*?==/g, " ")
       .replace(/\([^\)]*\)/g, " ")
       .replace(/\[\d+\]/g, " ")
@@ -4099,57 +4268,215 @@
     return tokens;
   }
 
+  var TOPIC_KEYWORD_MAP = {
+    "internet": "अंतरजाल",
+    "net": "अंतरजाल",
+    "web": "अंतरजाल",
+    "computer": "संगणक",
+    "sports": "खेल",
+    "cricket": "क्रिकेट",
+    "science": "विज्ञान",
+    "technology": "प्रौद्योगिकी",
+    "tech": "प्रौद्योगिकी",
+    "ai": "कृत्रिम बुद्धिमत्ता",
+    "space": "अंतरिक्ष",
+    "isro": "भारतीय अंतरिक्ष अनुसंधान",
+    "moon": "चंद्रमा",
+    "chandrayaan": "चंद्रयान",
+    "sun": "सूर्य",
+    "solar": "सौर ऊर्जा",
+    "railway": "भारतीय रेल",
+    "train": "भारतीय रेल",
+    "vande bharat": "वंदे भारत एक्सप्रेस",
+    "environment": "पर्यावरण",
+    "pollution": "प्रदूषण",
+    "climate": "जलवायु",
+    "health": "स्वास्थ्य",
+    "yoga": "योग",
+    "education": "शिक्षा",
+    "history": "इतिहास",
+    "rajasthan": "राजस्थान",
+    "jaipur": "जयपुर",
+    "jodhpur": "जोधपुर",
+    "udaipur": "उदयपुर",
+    "economy": "भारतीय अर्थव्यवस्था",
+    "budget": "केंद्रीय बजट",
+    "agriculture": "भारतीय कृषि",
+    "farming": "जैविक खेती",
+    "farmer": "किसान",
+    "water": "जल संरक्षण",
+    "news": "समाचार",
+    "newspaper": "समाचार पत्र"
+  };
+
+  var liveNewsMemory = [];
+  var liveNewsPointer = 0;
+
+  function fetchLiveNewspaperArticles() {
+    var rssFeeds = [
+      "https://news.google.com/rss?hl=hi&gl=IN&ceid=IN:hi",
+      "https://feeds.bbci.co.uk/hindi/rss.xml",
+      "https://www.amarujala.com/rss/national-news.xml"
+    ];
+    var randomFeed = rssFeeds[Math.floor(Math.random() * rssFeeds.length)];
+    var apiUrl = "https://api.rss2json.com/v1/api.json?rss_url=" + encodeURIComponent(randomFeed);
+
+    return fetch(apiUrl).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (!data || !Array.isArray(data.items) || data.items.length === 0) {
+        throw new Error("No news items in RSS feed");
+      }
+      var parsed = [];
+      data.items.forEach(function (it) {
+        var rawTitle = it.title || "";
+        var publisher = "दैनिक समाचार";
+        var cleanTitle = rawTitle;
+        var dashParts = rawTitle.split(/\s+[-–—]\s+/);
+        if (dashParts.length > 1) {
+          publisher = dashParts[dashParts.length - 1].trim();
+          cleanTitle = dashParts.slice(0, -1).join(" - ").trim();
+        } else if (data.feed && data.feed.title) {
+          publisher = data.feed.title.indexOf("BBC") >= 0 ? "बीबीसी हिंदी" : (data.feed.title.indexOf("Amar") >= 0 ? "अमर उजाला" : "दैनिक समाचार");
+        }
+        var desc = it.description || it.content || "";
+        var fullProse = cleanTitle + "। " + desc;
+        parsed.push({
+          title: cleanTitle,
+          publisher: publisher,
+          prose: fullProse
+        });
+      });
+      if (parsed.length === 0) throw new Error("No valid news prose parsed");
+      liveNewsMemory = parsed;
+      liveNewsPointer = 0;
+      return parsed;
+    });
+  }
+
+  function launchPassageLock(title, teachHeader, tokens, isExam, minutes, lang, isEn) {
+    if (isExam) {
+      startLock({
+        id: minutes === 5 ? (isEn ? "exam-en-5min" : "exam-hi-5min") : (isEn ? "exam-en" : "exam-hi"),
+        title: (isEn ? "RSSB English Speed · " : "RSSB Hindi Speed · ") + minutes + " min (" + title + ")",
+        teach: "विषय: " + teachHeader + "। कुल " + tokens.length + " शब्द। प्रत्येक सही शब्द पर 0.0625 अंक। Space दबाने पर शब्द लॉक होगा।",
+        words: tokens,
+        limit: minutes * 60000,
+        hints: "none",
+        showFix: false,
+        lang: lang,
+        exam: true,
+        finger: isEn ? "English touch typing" : "DevLys / Kruti"
+      });
+    } else {
+      startLock({
+        id: "para",
+        title: "Word-lock: " + title,
+        teach: "विषय: " + teachHeader + "। प्रत्येक बार एक नया विषय मिलेगा। Space दबाने से शब्द लॉक होगा।",
+        words: tokens,
+        hints: isEn ? "english" : "hindi",
+        lang: lang,
+        showFix: true,
+        finger: "Read, then the fingers"
+      });
+    }
+  }
+
+  function getNextLiveNewspaperPassage(targetWords, isExam, minutes, lang) {
+    function pickFromMemory() {
+      if (liveNewsMemory.length > 0 && liveNewsPointer < liveNewsMemory.length) {
+        var it = liveNewsMemory[liveNewsPointer++];
+        var tokens = tokenizeLiveWords(it.prose, lang, targetWords);
+        if (tokens.length >= 25) {
+          var title = "ताजा समाचार: " + it.title;
+          var source = it.publisher || "दैनिक समाचार";
+          showToast("📰 <b>" + esc(source) + "</b> से ताजा समाचार: " + esc(it.title));
+          launchPassageLock(title, "📰 " + source + " · ताजा समाचार", tokens, isExam, minutes, lang, false);
+          return Promise.resolve(true);
+        }
+      }
+      return null;
+    }
+
+    var fromMem = pickFromMemory();
+    if (fromMem) return fromMem;
+
+    return fetchLiveNewspaperArticles().then(function () {
+      var ok = pickFromMemory();
+      if (!ok) throw new Error("Failed to extract tokens from live news");
+      return ok;
+    });
+  }
+
+  function loadGuaranteedEditorialPassage(targetWords, isExam, minutes, lang) {
+    store.seenTopicIndices = Array.isArray(store.seenTopicIndices) ? store.seenTopicIndices : [];
+    var lastIdx = typeof store.lastWordLockThemeIndex === "number" ? store.lastWordLockThemeIndex : -1;
+    var themed = (KD.nextThemedWordLockPassage) ? KD.nextThemedWordLockPassage(lastIdx, store.seenTopicIndices) : null;
+    if (!themed) throw new Error("No editorial topics available");
+
+    store.lastWordLockThemeIndex = themed.index;
+    store.seenTopicIndices.push(themed.index);
+    if (store.seenTopicIndices.length > 45) {
+      store.seenTopicIndices = store.seenTopicIndices.slice(-20);
+    }
+    if (typeof save === "function") save();
+
+    var pub = themed.newspaper || "दैनिक समाचार";
+    var cat = themed.category || "संपादकीय";
+    var fullTitle = pub + " " + cat + ": " + themed.title;
+    showToast("🗞️ <b>" + esc(pub) + " " + esc(cat) + "</b>: " + esc(themed.title) + " (50 संपादकीय संग्रह)");
+
+    launchPassageLock(themed.title, "🗞️ " + pub + " " + cat + " · " + (themed.theme || ""), themed.tokens, isExam, minutes, lang, false);
+    return Promise.resolve(true);
+  }
+
   function fetchClientSideLivePassage(customTopic, targetWords, isExam, minutes, lang) {
     var isEn = lang === "en";
-    var pool = isEn ? LIVE_TOPIC_POOL_EN : LIVE_TOPIC_POOL_HI;
     var query = customTopic && customTopic.trim();
-    if (!query) {
-      query = pool[Math.floor(Math.random() * pool.length)];
+
+    if (query === "newspaper" || query === "live-news" || query === "news") {
+      return getNextLiveNewspaperPassage(targetWords, isExam, minutes, lang);
     }
+
+    if (query === "editorial") {
+      return loadGuaranteedEditorialPassage(targetWords, isExam, minutes, lang);
+    }
+
+    var isRandom = !query || query === "web-article" || query === "random";
+    if (isRandom) {
+      var pool = isEn ? LIVE_TOPIC_POOL_EN : LIVE_TOPIC_POOL_HI;
+      query = pool[Math.floor(Math.random() * pool.length)];
+    } else if (!isEn) {
+      var lowerQuery = query.toLowerCase();
+      if (TOPIC_KEYWORD_MAP[lowerQuery]) {
+        query = TOPIC_KEYWORD_MAP[lowerQuery];
+      }
+    }
+
     var wikiDomain = isEn ? "en.wikipedia.org" : "hi.wikipedia.org";
-    var url = "https://" + wikiDomain + "/w/api.php?action=query&generator=search&gsrsearch=" + encodeURIComponent(query) + "&gsrlimit=1&prop=extracts&explaintext=1&format=json&origin=*";
+    var offset = isRandom ? Math.floor(Math.random() * 15) : 0;
+    var url = "https://" + wikiDomain + "/w/api.php?action=query&generator=search&gsrsearch=" + encodeURIComponent(query) + "&gsroffset=" + offset + "&gsrlimit=5&prop=extracts&explaintext=1&format=json&origin=*";
 
     return fetch(url).then(function (res) {
       if (!res.ok) throw new Error("HTTP " + res.status);
       return res.json();
     }).then(function (data) {
       var pages = data && data.query && data.query.pages;
-      if (!pages) throw new Error("No wiki pages");
-      var firstKey = Object.keys(pages)[0];
-      var page = pages[firstKey];
-      if (!page || !page.extract || page.extract.length < 50) throw new Error("Short extract");
+      if (!pages) throw new Error("No wiki pages found for: " + query);
+      var pageList = Object.values(pages).filter(function (p) {
+        return p && p.extract && p.extract.length >= 80;
+      });
+      if (pageList.length === 0) throw new Error("Extracts too short for: " + query);
 
-      var tokens = tokenizeLiveWords(page.extract, lang, targetWords);
-      if (tokens.length < 20) throw new Error("Insufficient tokens");
+      var chosenPage = pageList[Math.floor(Math.random() * pageList.length)];
+      var tokens = tokenizeLiveWords(chosenPage.extract, lang, targetWords);
+      if (tokens.length < 20) throw new Error("Insufficient tokens generated");
 
-      var title = page.title || query;
-      showToast("🌐 इंटरनेट से नया विषय लोड हुआ: <b>" + esc(title) + "</b> (Wikipedia Live)");
+      var title = chosenPage.title || query;
+      showToast("🌐 इंटरनेट से नया विषय: <b>" + esc(title) + "</b> (Wikipedia Live)");
 
-      if (isExam) {
-        startLock({
-          id: minutes === 5 ? (isEn ? "exam-en-5min" : "exam-hi-5min") : (isEn ? "exam-en" : "exam-hi"),
-          title: (isEn ? "RSSB English Speed · " : "RSSB Hindi Speed · ") + minutes + " min (" + title + ")",
-          teach: "विषय: " + title + " · 🌐 Live Internet। कुल " + tokens.length + " शब्द। प्रत्येक सही शब्द पर 0.0625 अंक। Space दबाने पर शब्द लॉक होगा।",
-          words: tokens,
-          limit: minutes * 60000,
-          hints: "none",
-          showFix: false,
-          lang: lang,
-          exam: true,
-          finger: isEn ? "English touch typing" : "DevLys / Kruti"
-        });
-      } else {
-        startLock({
-          id: "para",
-          title: "Word-lock: " + title,
-          teach: "विषय: " + title + " · 🌐 Live Internet। प्रत्येक बार इंटरनेट से नया विषय। Space दबाने से शब्द लॉक होगा।",
-          words: tokens,
-          hints: isEn ? "english" : "hindi",
-          lang: lang,
-          showFix: true,
-          finger: "Read, then the fingers"
-        });
-      }
+      launchPassageLock(title, "🌐 Live Web Article (" + title + ")", tokens, isExam, minutes, lang, isEn);
       return true;
     });
   }
@@ -4160,28 +4487,11 @@
     var minutes = isExamMinutes === 5 ? 5 : 10;
     var targetWords = wordCount || (isExam ? (minutes === 5 ? 200 : 400) : 110);
 
-    showToast("🌐 इंटरनेट से नया पैराग्राफ लोड किया जा रहा है...");
-
     function fallbackToOffline(err) {
-      console.warn("Live internet fetch failed, falling back to offline collection:", err);
-      showToast("📚 इंटरनेट अनुपलब्ध: ऑफ़लाइन संग्रह से विषय लोड किया गया");
-      if (isExam) {
-        startExam(lang, minutes, targetWords);
-      } else {
-        var lastIdx = typeof store.lastWordLockThemeIndex === "number" ? store.lastWordLockThemeIndex : -1;
-        var themed = (KD.nextThemedWordLockPassage) ? KD.nextThemedWordLockPassage(lastIdx) : null;
-        if (themed) {
-          store.lastWordLockThemeIndex = themed.index;
-          if (typeof save === "function") save();
-          startLock({
-            id: "para",
-            title: "Word-lock: " + themed.title,
-            teach: "विषय: " + themed.title + " (" + themed.theme + ")। ऑफलाइन संग्रह से नया विषय। Space दबाने से शब्द लॉक होगा।",
-            words: themed.tokens,
-            hints: "hindi",
-            showFix: true,
-            finger: "Read, then the fingers"
-          });
+      console.warn("Live fetch fallback to 50 curated editorials:", err);
+      loadGuaranteedEditorialPassage(targetWords, isExam, minutes, lang).catch(function () {
+        if (isExam) {
+          startExam(lang, minutes, targetWords);
         } else {
           startLock({
             id: "para",
@@ -4193,8 +4503,15 @@
             finger: "Read, then the fingers"
           });
         }
-      }
+      });
     }
+
+    if (customTopic === "editorial") {
+      loadGuaranteedEditorialPassage(targetWords, isExam, minutes, lang).catch(fallbackToOffline);
+      return;
+    }
+
+    showToast("🌐 नया पैराग्राफ लोड किया जा रहा है...");
 
     var isStaticHost = location.hostname.indexOf("github.io") >= 0 || location.protocol === "file:" || (location.hostname !== "127.0.0.1" && location.hostname !== "localhost");
 
@@ -4220,35 +4537,11 @@
         var sourceLabel = data.source === "gemini-live" ? "🌐 Live AI" : (data.source === "wikipedia-live" ? "🌐 Wikipedia Live" : "📚 Curated Bank");
         showToast("✔ नया विषय लोड हुआ: <b>" + esc(title) + "</b> (" + sourceLabel + ")");
 
-        if (isExam) {
-          startLock({
-            id: minutes === 5 ? "exam-hi-5min" : "exam-hi",
-            title: "RSSB Hindi speed · " + minutes + " min (" + title + ")",
-            teach: "विषय: " + title + " (" + (data.theme || "Current Topic") + ") · " + sourceLabel + "। कुल " + data.tokens.length + " शब्द। प्रत्येक सही शब्द पर 0.0625 अंक। Space दबाने पर शब्द लॉक होगा।",
-            words: data.tokens,
-            limit: minutes * 60000,
-            hints: "none",
-            showFix: false,
-            lang: "hi",
-            exam: true,
-            finger: "DevLys / Kruti"
-          });
-        } else {
-          startLock({
-            id: "para",
-            title: "Word-lock: " + title,
-            teach: "विषय: " + title + " (" + (data.theme || "Current Topic") + ") · " + sourceLabel + "। प्रत्येक बार एक नया विषय मिलेगा। Space दबाने से शब्द लॉक होगा।",
-            words: data.tokens,
-            hints: "hindi",
-            showFix: true,
-            finger: "Read, then the fingers"
-          });
-        }
+        launchPassageLock(title, (data.theme || "Current Topic") + " · " + sourceLabel, data.tokens, isExam, minutes, lang, false);
       } else {
         throw new Error("Invalid response format");
       }
     }).catch(function (err) {
-      // If local server endpoint failed, try direct Wikipedia fetch before offline fallback
       fetchClientSideLivePassage(customTopic, targetWords, isExam, minutes, lang).catch(function () {
         fallbackToOffline(err);
       });
