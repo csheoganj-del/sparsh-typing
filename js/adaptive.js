@@ -550,7 +550,7 @@
     var wpm = ms >= 400 && keys > 0 ? Math.round(KD.msToWpm(ms / keys) * 10) / 10 : 0;
     var first = words.length ? Math.round(clean / words.length * 1000) / 10 : 0;
     var cruise = state ? Number(state.cruise) || 0 : 0;
-    var save = words.length >= 8 && ms >= 35000 && first >= 94 && wpm > 0 && wpm <= 80 && wpm + 0.5 >= cruise;
+    var save = words.length >= 8 && ms >= 35000 && Math.round(first) >= 94 && wpm > 0 && wpm <= 80 && wpm + 0.5 >= cruise;
     return {
       wpm: wpm, ms: Math.round(ms), keys: keys, words: words.length, first: first, save: save,
       gain: Math.round((wpm - cruise) * 10) / 10,
@@ -644,7 +644,7 @@
     var bare = eyesPace(list.filter(function (word) { return word.phase === 'bare' && !word.rescue; }));
     var mark = eyesPace(list.filter(function (word) { return word.phase === 'mark' && !word.rescue; }));
     var cruise = state ? Number(state.cruise) || 0 : 0;
-    var save = bare.words >= 8 && bare.ms >= 35000 && bare.first >= 94 && bare.wpm > 0 && bare.wpm <= 80 && bare.wpm + 0.5 >= cruise;
+    var save = bare.words >= 8 && bare.ms >= 35000 && Math.round(bare.first) >= 94 && bare.wpm > 0 && bare.wpm <= 80 && bare.wpm + 0.5 >= cruise;
     return {
       wpm: bare.wpm, ms: bare.ms, keys: bare.keys, words: bare.words, first: bare.first, save: save,
       gain: Math.round((bare.wpm - cruise) * 10) / 10,

@@ -3853,7 +3853,7 @@
     } else if (held.save && held.gain >= 2) {
       headline = 'You held ' + fmt(held.wpm) + ' WPM';
       detail = fmt(held.gain) + ' WPM above your recent ' + fmt(cruise) + ', with the bar off, for ' + Math.round(held.ms / 1000) + ' seconds. ' + Math.round(held.first) + '% of those words were clean on the first try. This hold joins your recent sessions. Recent speed is the middle of those sessions, so one hold moves it only a little. It does not replace the two-minute check.';
-    } else if (held.first < 94) {
+    } else if (Math.round(held.first) < 94) {
       headline = 'Clean the words, then the speed stays';
       detail = 'The ring reached ' + fmt(ring) + ' WPM. The unpaced minute was ' + fmt(held.wpm) + ' WPM at ' + Math.round(held.first) + '% clean words. Recent speed stays put until a minute is at least 94% clean.';
     } else if (held.ms < 35000) {
@@ -3889,7 +3889,7 @@
     } else if (held.save && held.gain >= 2) {
       headline = 'You held ' + fmt(held.wpm) + ' WPM with no mark';
       detail = fmt(held.gain) + ' WPM above your recent ' + fmt(cruise) + ', with the word unmarked, for ' + Math.round(held.ms / 1000) + ' seconds. ' + Math.round(held.first) + '% of those words were clean. This joins your recent sessions a little. It does not replace the two-minute check or the 10-minute exam.';
-    } else if (held.first < 94) {
+    } else if (Math.round(held.first) < 94) {
       headline = 'The fingers are fine. The eyes lost the word';
       detail = 'With the mark, that part was ' + marked + ' WPM. Without the mark, it was ' + fmt(held.wpm) + ' WPM and ' + Math.round(held.first) + '% of the words were clean. Recent speed stays put until the unmarked words are at least 94% clean.';
     } else if (held.ms < 35000) {
@@ -3898,9 +3898,12 @@
     } else if (held.wpm + 0.5 < cruise) {
       headline = 'Without the mark, the passage was slower';
       detail = 'With the mark, that part was ' + marked + ' WPM. Without it, ' + fmt(held.wpm) + ' WPM, slower than your recent ' + fmt(cruise) + '. Recent speed stays put. Run it again and keep your place in the passage.';
-    } else {
+    } else if (held.save) {
       headline = 'You held ' + fmt(held.wpm) + ' WPM with no mark';
-      detail = 'That sits next to your recent ' + fmt(cruise) + '. The marked part was ' + marked + ' WPM. Another clean unmarked stretch can move recent speed a little.';
+      detail = 'That sits next to your recent ' + fmt(cruise) + '. The marked part was ' + marked + ' WPM. This stretch joins your recent sessions. One passage moves that number only a little. It does not replace the two-minute check.';
+    } else {
+      headline = 'The unmarked part was too short';
+      detail = 'Stay after the mark leaves. A few unmarked words are not enough to count.';
     }
     return '<main id="main-content" class="wrap narrow result-page"><section class="card result-card"><div class="kicker">Prepare for the exam</div><h1>' + headline + '</h1>' +
       speedFigures([[marked, 'With the mark'], [bare, 'No mark'], [fmt(cruise), 'Recent']]) +
