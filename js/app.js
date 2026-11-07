@@ -738,6 +738,11 @@
       '<div class="course-bottom"><span>All ' + KD.LESSONS.length + ' lessons</span><button class="btn" data-act="jump-current">Jump to current lesson</button></div></main>';
   }
 
+  function hindiBestMarks(best) {
+    if (!best) return 0;
+    if (best.correct != null && KD.hindiMarks) return Math.round(KD.hindiMarks(best.correct) * 100) / 100;
+    return Number(best.marks) || 0;
+  }
   function practice40HTML() {
     function ignitionReady() {
       var keys = store.placedKeys || {};
@@ -777,7 +782,7 @@
       '<div class="practice40-routine"><div><b>1. Learn and transfer</b><p>' + esc(learn) + '</p><button class="btn" data-act="start-current">' + (offer ? 'New sentence practice' : 'Continue learning') + '</button>' + (offer ? '<button class="btn" data-act="new-ai-sentence">New AI sentences</button>' : '') + '</div>' +
       '<div><b>2. Practise your combinations</b><p>Recent errors choose the drill, with extra attention to ' + esc(weakNames) + '. A wrong Space locks the word on the exam.</p><button class="btn" data-act="practice40-weak">Practise weak combinations</button><button class="btn primary" data-act="newspaper-live" title="Fresh breaking news from Hindi newspapers">📰 ताजा समाचार</button><button class="btn" data-act="editorial-topic" title="50 curated authentic newspaper editorials (no repetition)">🗞️ संपादकीय लेख</button><button class="btn" data-act="para" title="Fresh word-lock transfer">Word-lock transfer</button><button class="btn ghost" data-act="prompt-topic" title="Enter any topic">🔍 मनपसंद विषय</button>' + (program.burstEligible ? '<button class="btn" data-act="rhythm-burst">25-second rhythm burst</button>' : '') + '</div>' +
       '<div><b>3. Speed Check · 2 min</b><p>' + (state.canStart ? state.full ? 'Fresh Hindi passages. Repeat without keyboard or hand guides.' : 'Use familiar keys. Full passages unlock when their keys are learned.' : 'Learn the first keys and Space before checking speed.') + '</p><button class="btn primary" data-act="practice40-check"' + (state.canStart ? '' : ' disabled') + '>Check my speed</button></div>' +
-      '<div><b>4. RSSB Exam Simulation</b><p>Real exam scenario: 400 words on Rajasthan geography, culture & ecology. DevLys 010. Space locks word. 25 Marks (Cutoff: 9/25).</p><button class="btn primary" data-act="exam-hi">10-Min Full Exam</button><button class="btn ghost" data-act="exam-hi-5min">5-Min Mini Exam</button>' + (store.bestHi ? '<p class="small muted" style="margin-top:6px;">Best: <b>' + fmt(store.bestHi.marks) + ' / 25 Marks</b> (' + store.bestHi.correct + ' correct)</p>' : '') + '</div></div>' +
+      '<div><b>4. RSSB Exam Simulation</b><p>Real exam scenario: 400 words on Rajasthan geography, culture & ecology. DevLys 010. Space locks word. 25 Marks (Cutoff: 9/25).</p><button class="btn primary" data-act="exam-hi">10-Min Full Exam</button><button class="btn ghost" data-act="exam-hi-5min">5-Min Mini Exam</button>' + (store.bestHi ? '<p class="small muted" style="margin-top:6px;">Best: <b>' + fmt(hindiBestMarks(store.bestHi)) + ' / 25 Marks</b> (' + store.bestHi.correct + ' correct)</p>' : '') + '</div></div>' +
       '<p class="small muted">' + (program.today.recordedMinutes || 0) + ' recorded practice minutes today across all devices. Goal: 98% first-try accuracy on fresh passages, building toward ' + goalWpm + ' WPM.</p>' +
       '<details class="training-plan" open><summary>Your daily routine · about ' + program.totalMinutes + ' minutes including breaks</summary><div class="training-blocks">' + program.blocks.map(function (block) { return '<div><b>' + esc(block.title) + ' · ' + block.minutes + ' min</b><p>' + esc(block.detail) + '</p></div>'; }).join('') + '</div><p class="small muted">Take a two-minute break between blocks. You can split the blocks between morning and evening. Keep the same DevLys keyboard mapping when you switch devices.</p></details>' +
       '<details class="training-plan"><summary>Your 20-day checkpoints</summary><p class="small muted">' + esc(program.note) + '</p><div class="training-checkpoints">' + program.milestones.map(function (m) { return '<span>Day ' + m.day + '<b>' + m.targetWpm + ' WPM</b><small>' + esc(m.date) + '</small></span>'; }).join('') + '</div><p class="small muted">Stable finger-to-key mapping, preparing the next keystroke, and small hand movements guide the technique practice. <a href="https://userinterfaces.aalto.fi/how-we-type/" target="_blank" rel="noopener">Typing research</a>. The exact daily routine is a practice plan, not a proven deadline for reaching ' + goalWpm + ' WPM.</p></details>' +
@@ -3090,10 +3095,11 @@
       var minutes = Math.max(ms / 60000, 1 / 60);
       var wordRate = okw / minutes;
       var keyRate = KD.keyWpm(typedKeys(), ms);
-      var marks = session.exam && session.words.length >= 350
-        ? (session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw))
-        : Math.min(25, Math.max(0, wordRate * 10 * markRate));
+      var earned = session.lang === "en" ? KD.englishMarks(okw) : KD.hindiMarks(okw);
+      var projected = Math.min(25, Math.max(0, wordRate * 10 * markRate));
+      var marks = session.exam ? earned : projected;
       marks = Math.round(marks * 100) / 100;
+      projected = Math.round(projected * 100) / 100;
       session.result = {
         kind: "lock",
         correct: okw,
@@ -3101,6 +3107,7 @@
         total: session.words.length,
         done: session.marks.length,
         marks: marks,
+        paceMarks: projected,
         rawMarks: Math.round(okw * markRate * 100) / 100,
         wordRate: wordRate,
         wpm: keyRate,
@@ -3111,7 +3118,7 @@
         acc: session.marks.length ? (okw / session.marks.length) * 100 : 0
       };
       if (session.exam && session.lang === "hi") {
-        if (!store.bestHi || marks > store.bestHi.marks) store.bestHi = { marks: marks, correct: okw, at: Date.now() };
+        if (!store.bestHi || marks > hindiBestMarks(store.bestHi)) store.bestHi = { marks: marks, correct: okw, at: Date.now() };
       }
       if (session.exam && session.lang === "en") {
         if (!store.bestEn || marks > store.bestEn.marks) store.bestEn = { marks: marks, correct: okw, at: Date.now() };
@@ -3786,6 +3793,13 @@
     var formulaNote = isEn
       ? "English Typing: 0.05 marks for each correct word (500 words = 25 marks). Minimum qualifying cutoff: 9.0 marks (36%)."
       : "Hindi Typing: 0.0625 marks for each correct word (400 words = 25 marks). Minimum qualifying cutoff: 9.0 marks (36%).";
+    var paceNote = "";
+    if (session && session.exam && r.paceMarks != null && r.ms && r.ms < 570000 && Math.abs(r.paceMarks - marks) >= 0.05) {
+      paceNote = " At this pace, 10 minutes would be about " + fmt(r.paceMarks) + " marks. This paper counts only the words you typed.";
+    }
+    var countNote = session && session.exam
+      ? " Only words you type correctly are counted. 144 correct Hindi words are 9 marks." + paceNote
+      : " Duration normalized to standard 10-minute RSSB scale.";
 
     return (
       '<div class="rssb-scorecard-box">' +
@@ -3834,7 +3848,7 @@
         comparisonTextHTML(session) +
 
         '<div class="rssb-footer-note">' +
-          '<span><b>Rules and Instructions:</b> ' + formulaNote + ' Duration normalized to standard 10-minute RSSB scale. Backspace is allowed within the uncommitted word only (no marks deducted if word is corrected before pressing Space); Space locks the word.</span>' +
+          '<span><b>Rules and Instructions:</b> ' + formulaNote + countNote + ' Backspace is allowed within the uncommitted word only (no marks deducted if word is corrected before pressing Space); Space locks the word.</span>' +
         '</div>' +
       '</div>'
     );
